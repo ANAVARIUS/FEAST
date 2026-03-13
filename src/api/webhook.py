@@ -1,11 +1,12 @@
 import requests
 import time
 from config import Telegram_key
+from src.api.Services.telegram_service import telegram_service_instance
 
 
 def telegram_webhook_start(url: str):
     webhook_url = f"{url}/webhook"
-    telegram_url = f"https://api.telegram.org/bot{Telegram_key}/setWebhook"
+    telegram_url = telegram_service_instance.telegram_webhook_url
 
     payload = {"url": webhook_url}
 
