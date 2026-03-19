@@ -1,77 +1,80 @@
 from __future__ import annotations
 
 import os
+import redis
 from typing import Optional, Union
 
 from dotenv import load_dotenv
+from langgraph.checkpoint.redis import RedisSaver
 
 load_dotenv()
 
 
 def get_redis_url() -> str:
-    """
-    Redis URL usada por LangGraph Redis checkpointer.
+    """Construye la URL de Redis a partir de variables de entorno"""
+    url = os.getenv("REDIS_URL")
+    if url and (url.startswith("redis://") or url.startswith("rediss://")):
+        return url
 
-    Espera una de estas variables de entorno:
-    - REDIS_URL
-    - REDIS_URI
-    """
-    # Preferir config central si existe
-    try:
-        from src.core.config import config
+    host = os.getenv("REDIS_HOST", "localhost")
+    port = int(os.getenv("REDIS_PORT", "6379"))
+    db = int(os.getenv("REDIS_DB", "0"))
+    password = os.getenv("REDIS_PASSWORD")
 
-        return config.get_redis_conn_string()
-    except Exception:
-        return (
-            os.getenv("REDIS_URL")
-            or os.getenv("REDIS_URI")
-            or "redis://localhost:6379/0"
-        )
+    auth = f":{password}@" if password else ""
+    return f"redis://{auth}{host}:{port}/{db}"
 
 
 def thread_id_from_chat_id(chat_id: Union[int, str]) -> str:
-    """
-    En LangGraph, la persistencia por "chat_id" suele mapearse a thread_id.
-    """
     return str(chat_id)
 
 
 def create_redis_checkpointer(
     redis_url: Optional[str] = None,
     *,
+    expire_seconds: Optional[int] = 28800,  # 8 horas por defecto
     do_setup: bool = True,
-):
+) -> RedisSaver:
     """
-    Crea y (opcionalmente) inicializa un RedisSaver para persistencia.
-
-    Nota: según la doc de LangGraph, para Redis debes ejecutar:
-    - `checkpointer.setup()` la primera vez.
+    Crea y retorna un RedisSaver listo para usar en LangGraph.
+    Si la versión de LangGraph lo soporta, se puede pasar expire_seconds para TTL.
     """
-    # Import lazy para que el proyecto arranque aunque falten dependencias aún.
-    from langgraph.checkpoint.redis import RedisSaver
-
     url = redis_url or get_redis_url()
-    checkpointer = RedisSaver.from_conn_string(url)
-    if do_setup:
-        checkpointer.setup()
-    return checkpointer
+    # Verificar conexion (opcional)
+    redis_client = redis.Redis.from_url(url, decode_responses=False)
+    redis_client.ping()
+    # Crear el checkpointer usando la URL (y opcionalmente expire_seconds)
+    # El constructor acepta redis_url y otros parametros; algunos permiten expire_seconds
+    try:
+        # Intentar con expire_seconds
+        saver = RedisSaver(redis_url=url, expire_seconds=expire_seconds)
+    except TypeError:
+        # Si no acepta expire_seconds, crearlo sin el
+        saver = RedisSaver(redis_url=url)
+    if do_setup and hasattr(saver, 'setup'):
+        saver.setup()
+    return saver
 
 
 async def create_async_redis_checkpointer(
     redis_url: Optional[str] = None,
     *,
+    expire_seconds: Optional[int] = 28800,
     do_setup: bool = True,
 ):
-    """
-    Variante async del checkpointer de Redis.
-    """
     from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
     url = redis_url or get_redis_url()
-    checkpointer = AsyncRedisSaver.from_conn_string(url)
-    if do_setup:
-        await checkpointer.asetup()
-    return checkpointer
+    redis_client = redis.asyncio.from_url(url)
+    # Verificar conexion
+    await redis_client.ping()
+    try:
+        saver = AsyncRedisSaver(redis_url=url, expire_seconds=expire_seconds)
+    except TypeError:
+        saver = AsyncRedisSaver(redis_url=url)
+    if do_setup and hasattr(saver, 'asetup'):
+        await saver.asetup()
+    return saver
 
 
 __all__ = [
@@ -80,4 +83,3 @@ __all__ = [
     "create_redis_checkpointer",
     "create_async_redis_checkpointer",
 ]
-
