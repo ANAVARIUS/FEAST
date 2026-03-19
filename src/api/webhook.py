@@ -1,6 +1,6 @@
 import requests
 import time
-from config import Telegram_key
+from src.api.config import Telegram_key
 from src.api.Services.telegram_service import telegram_service_instance
 
 
@@ -17,7 +17,3 @@ def telegram_webhook_start(url: str):
         print("Webhook running...")
     else:
         print("ERROR: ", response.text)
-
-
-
-

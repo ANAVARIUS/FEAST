@@ -1,7 +1,7 @@
 import uvicorn
-from config import get_ngrok_tunnel_url, Port, app
+from src.api.config import get_ngrok_tunnel_url, Port, app
 from src.api.endpoints.webhook_endpoint import webhook_router
-from webhook import telegram_webhook_start
+from src.api.webhook import telegram_webhook_start
 
 if __name__ == '__main__':
     ngrok_url = get_ngrok_tunnel_url()
