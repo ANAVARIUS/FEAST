@@ -77,9 +77,22 @@ class GeminiLLM(BaseLLM):
                 config = types.GenerateContentConfig(
                     max_output_tokens=self.max_output_tokens,
                     temperature=self.temperature,
-                    system_instruction="Eres un asistente conversacional útil. Debes recordar toda la información proporcionada por el usuario a lo largo de la conversación y usarla para responder de manera coherente. Responde en el mismo idioma que el usuario."
+                    # system_instruction="Eres un asistente conversacional útil. Debes recordar toda la información proporcionada por el usuario a lo largo de la conversación y usarla para responder de manera coherente. Responde en el mismo idioma que el usuario."
+                    # system_instruction="Eres un asistente conversacional útil. Debes recordar toda la información proporcionada por el usuario a lo largo de la conversación y usarla para responder de manera coherente. Responde en el mismo idioma que el usuario."
+                    system_instruction=(
+                        "Eres un asistente con memoria perfecta. "
+                        "Debes recordar toda la información que el usuario te haya dicho en esta conversación. "
+                        "El historial completo de mensajes se te proporciona a continuación. "
+                        "Cuando el usuario pregunte algo como '¿cuál es mi color favorito?', debes responder basándote en lo que él mismo dijo antes, por ejemplo: "
+                        "Si el usuario dijo 'mi color favorito es azul', y luego pregunta '¿cuál es mi color favorito?', debes responder 'Tu color favorito es azul'. "
+                        "No digas que no tienes memoria ni que no puedes acceder a información personal; toda la información está en el historial. "
+                        "Responde en el mismo idioma que el usuario."
+                    )
                 )
                 logger.debug("Intento %d Enviando %d mensajes...", attempt, len(contents))
+
+                logger.debug(f"Mensajes enviados a Gemini: {contents}")
+
                 response = self.client.models.generate_content(
                     model=self.model_name,
                     contents=contents,
