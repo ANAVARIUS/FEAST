@@ -27,12 +27,14 @@ jobs:
           ruff check .
 
       - name: Check de dependencias (pip-compile)
+        if: always()
         run: |
           pip install pip-tools
           pip install -r requirements.txt
           pip check
 
       - name: Buscar secretos con Gitleaks
+        if: always()
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
