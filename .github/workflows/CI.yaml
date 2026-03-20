@@ -1,0 +1,38 @@
+name: CI Static Analysis
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Lint con Ruff
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Check de dependencias (pip-compile)
+        run: |
+          pip install pip-tools
+          pip install -r requirements.txt
+          pip check
+
+      - name: Buscar secretos con Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
