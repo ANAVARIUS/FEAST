@@ -1,0 +1,41 @@
+[tool.ruff]
+# Directorios a ignorar y target de Python
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+# Seleccionamos las reglas:
+# E/W: Pycodestyle (PEP 8)
+# F: Pyflakes
+# N: pep8-naming (Convenciones de nombres)
+# ANN: flake8-annotations (Obliga a usar Type Hints)
+# D: pydocstyle (Docstrings)
+# B: flake8-bugbear (Evita errores comunes como try-except genéricos)
+# UP: pyupgrade
+select = ["E", "W", "F", "N", "ANN", "D", "B", "UP", "C90"]
+ignore = []
+
+[tool.ruff.lint.pydocstyle]
+# Forzamos el formato Google para los docstrings
+convention = "google"
+
+[tool.ruff.lint.flake8-annotations]
+# Obligatorio para todas las funciones, incluso si retornan None
+allow-star-arg-any = false
+ignore-fully-untyped = false
+
+[tool.ruff.lint.pep8-naming]
+# Regla personalizada para que los Agentes terminen en "Agent"
+classmethod-decorators = ["classmethod"]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignorar chequeo de tipos en tests si es muy restrictivo
+"tests/*" = ["ANN"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.pyright]
+# Configuración complementaria para tipado estricto (opcional)
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false  
