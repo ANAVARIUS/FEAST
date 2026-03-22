@@ -31,9 +31,22 @@ async def message_recept(request: Request):
 
     try:
         final_state = await config.graph.ainvoke(initial_state, config=thread_config)
-        assistant_messages = [m for m in final_state["messages"] if m["role"] == "assistant"]
+        # Extraer último mensaje del asistente (puede ser objeto o dict)
+        # Después de obtener final_state
+        assistant_messages = []
+        for m in final_state["messages"]:
+            if isinstance(m, dict):
+                role = m.get("role")
+                content = m.get("content")
+            else:
+                # Es un objeto de LangGraph (HumanMessage, AIMessage, etc.)
+                role = getattr(m, "type", None)      # "human", "ai", etc.
+                content = getattr(m, "content", "")
+            if role == "assistant" or role == "ai":  # LangGraph usa "ai" para el asistente
+                assistant_messages.append(content)
+
         if assistant_messages:
-            last_response = assistant_messages[-1]["content"]
+            last_response = assistant_messages[-1]
         else:
             last_response = "Lo siento, no pude generar una respuesta."
         telegram_service_instance.send_message(int(chat_id), last_response)

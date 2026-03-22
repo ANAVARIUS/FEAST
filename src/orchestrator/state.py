@@ -1,10 +1,10 @@
-from typing import TypedDict, List, Dict, Any, Optional
+from typing import TypedDict, List, Dict, Any, Optional, Annotated
 from datetime import datetime
+from langgraph.graph.message import add_messages
 
 
 class DeliveryState(TypedDict):
-    """Estado de la conversacion."""
-    messages: List[Dict[str, str]]
+    messages: Annotated[List[Dict[str, str]], add_messages]
     thread_id: str
     intent: Optional[str]
     cart: Optional[List[Dict]]

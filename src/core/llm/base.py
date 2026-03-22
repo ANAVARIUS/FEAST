@@ -2,33 +2,36 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from src.core.llm.types import ChatMessage
 
 
 @dataclass(frozen=True)
 class LLMResponse:
+    """Respuesta del LLM."""
     text: str
-    raw: Optional[object] = None
+    raw: Optional[Any] = None
 
 
 class BaseLLM(ABC):
-    """
-    Interfaz estable para el LLM.
-
-    El resto del sistema (por ejemplo el grafo) solo debe depender de esta clase.
-    Cambiar de Gemini a SageMaker debe implicar solo cambiar el adapter concreto.
-    """
+    """Interfaz abstracta para cualquier modelo de lenguaje."""
 
     @abstractmethod
     def invoke(self, messages: List[ChatMessage]) -> LLMResponse:
+        """Invoca el modelo de manera síncrona."""
         raise NotImplementedError
 
     async def ainvoke(self, messages: List[ChatMessage]) -> LLMResponse:
-        # implementacion de wrappers async por defecto
+        """Invoca el modelo de manera asíncrona. Por defecto llama a invoke en un hilo."""
+        import asyncio
+        return await asyncio.to_thread(self.invoke, messages)
+
+    def __call__(self, messages: List[ChatMessage]) -> LLMResponse:
+        """Atajo para invoke."""
         return self.invoke(messages)
 
-
-__all__ = ["BaseLLM", "LLMResponse"]
-
+    @abstractmethod
+    def get_capabilities(self) -> Dict[str, Any]:
+        """Retorna información sobre el modelo (nombre, proveedor, etc.)."""
+        raise NotImplementedError

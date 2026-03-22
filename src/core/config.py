@@ -1,54 +1,53 @@
 import os
-from dotenv import load_dotenv
-from pydantic import BaseSettings, Field
 from typing import Optional
 
-load_dotenv()
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Config(BaseSettings):
-    """Configuracion centralizada de la aplicacion."""
-    
+    """Configuración centralizada de la aplicación."""
+
     # Telegram
-    telegram_token: str = Field(..., env="PAPI_BOT_KEY")
-    
+    telegram_token: str = Field(..., validation_alias="PAPI_BOT_KEY")
+
+    # Ngrok
+    ngrok_token: str = Field(..., validation_alias="NGROK_TOKEN")
+    port: int = Field(8000, validation_alias="PORT")
+
     # Gemini
-    gemini_api_key: str = Field(..., env='GEMINI_API_KEY')
-    gemini_model: str = "gemini-pro"
+    gemini_api_key: str = Field(..., validation_alias="GEMINI_API_KEY")
+    gemini_model: str = Field("models/gemini-2.0-flash", validation_alias="GEMINI_MODEL")
     gemini_temperature: float = 0.7
-    gemini_max_tokens: Optional[int] = None
-    gemini_timeout: int = 30
-    
+    gemini_max_tokens: int = 2048
+    gemini_max_retries: int = 3
+
     # Redis
-    # Puede ser URI completa (recomendado) o solo host (compatibilidad)
-    redis_url: str = Field("redis://localhost:6379/0", env='REDIS_URL')
-    redis_port: int = Field(6379, env='REDIS_PORT')
-    redis_db: int = Field(0, env='REDIS_DB')
-    redis_password: Optional[str] = Field(None, env='REDIS_PASSWORD')
+    redis_url: Optional[str] = Field(None, validation_alias="REDIS_URL")
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: Optional[str] = None
 
-    def get_redis_conn_string(self) -> str:
-        """
-        Devuelve una URI valida para Redis (redis://...).
-
-        - Si REDIS_URL ya viene como URI (redis:// o rediss://) la retorna tal cual.
-        - Si REDIS_URL viene como host (por ejemplo "localhost"), la construye usando
-          REDIS_PORT, REDIS_DB y REDIS_PASSWORD.
-        """
-        raw = (self.redis_url or "").strip()
-        if raw.startswith("redis://") or raw.startswith("rediss://"):
-            return raw
-
-        host = raw or "localhost"
-        password = (self.redis_password or "").strip()
-        auth = f":{password}@" if password else ""
-        return f"redis://{auth}{host}:{int(self.redis_port)}/{int(self.redis_db)}"
-    
     # App
-    log_level: str = Field("INFO", env='LOG_LEVEL')
-    max_history_length: int = 50  # Número máximo de mensajes a mantener en contexto
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    log_level: str = "INFO"
+    max_history_length: int = 50
 
-# Singleton de configuración
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @property
+    def redis_connection_string(self) -> str:
+        """Construye la URL de Redis a partir de componentes o devuelve REDIS_URL si existe."""
+        if self.redis_url:
+            return self.redis_url
+        auth = f":{self.redis_password}@" if self.redis_password else ""
+        return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+
+# Instancia global para usar en toda la aplicación
 config = Config()

@@ -1,5 +1,11 @@
+fastapi
+uvicorn
 python-dotenv
-pydantic
+pyngrok
 langgraph
-langgraph-checkpoint-redis
+redis
+redisvl
+google-genai
+pydantic
+pydantic-settings
 requests

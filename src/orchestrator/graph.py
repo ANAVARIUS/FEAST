@@ -1,24 +1,28 @@
 from langgraph.graph import StateGraph, END
 from src.orchestrator.state import DeliveryState
 from src.core.llm.base import BaseLLM
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any
 
 
 def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
-    """
-    Construye el grafo principal de la conversacion
-    - llm: instancia de BaseLLM 
-    - checkpointer: opcional, para persistencia (RedisSaver, MemorySaver, etc.)
-    """
     workflow = StateGraph(state_schema=DeliveryState)
 
-    # Nodo que usa el LLM
     async def llm_node(state: DeliveryState) -> DeliveryState:
         messages = state.get("messages", [])
+        print(f"DEBUG: Numero de mensajes en estado antes de LLM: {len(messages)}")
+        for i, msg in enumerate(messages):
+            if isinstance(msg, dict):
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+            else:
+                role = getattr(msg, "type", "unknown")
+                content = getattr(msg, "content", "")
+            print(f"  Mensaje {i}: role={role}, content={content[:100]}")
+
         response = await llm.ainvoke(messages)
         new_messages = messages + [{"role": "assistant", "content": response.text}]
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         updates = {
             "messages": new_messages,
             "updated_at": now,
