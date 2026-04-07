@@ -1,29 +1,54 @@
-from src.orchestrator.workers.menu_specialist import menu_specialist_node
 from langgraph.graph import StateGraph, END
 from src.orchestrator.state import DeliveryState
 from src.core.llm.base import BaseLLM
 from datetime import datetime, timezone
 from typing import Optional, Any
 
+from src.orchestrator.workers.menu_specialist import menu_specialist_node
+from src.core.prompts import ROUTER_PROMPT # Importacion del prompt few-shot
 
 def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
     workflow = StateGraph(state_schema=DeliveryState)
 
-    async def llm_node(state: DeliveryState) -> DeliveryState:
+    # Nodo de clasificacion: Determina la intencion del usuario
+    async def router_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
-        print(f"DEBUG: Numero de mensajes en estado antes de LLM: {len(messages)}")
-        for i, msg in enumerate(messages):
-            if isinstance(msg, dict):
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-            else:
-                role = getattr(msg, "type", "unknown")
-                content = getattr(msg, "content", "")
-            print(f"  Mensaje {i}: role={role}, content={content[:100]}")
+        
+        # 1. Recupera el mensaje mas reciente enviado por el humano
+        last_message = ""
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                last_message = msg.get("content", "")
+                break
+            elif hasattr(msg, "type") and msg.type == "human":
+                last_message = msg.content
+                break
 
+        # 2. Formatea el prompt con la tecnica Few-Shot
+        prompt = ROUTER_PROMPT.format(user_message=last_message)
+        
+        # 3. Consulta al modelo de lenguaje (LLM)
+        response = await llm.ainvoke([{"role": "user", "content": prompt}])
+        
+        # 4. Extrae la intencion detectada (MENU o GENERAL)
+        intent = "GENERAL"
+        if "MENU" in response.text.upper():
+            intent = "MENU"
+
+        return {"intent": intent}
+
+    # Logica de decision: Define el siguiente nodo segun la intencion
+    def route_intent(state: DeliveryState) -> str:
+        return state.get("intent", "GENERAL")
+
+    # Nodo generador: Redacta la respuesta final al cliente
+    async def llm_node(state: DeliveryState) -> dict:
+        messages = state.get("messages", [])
+        
         response = await llm.ainvoke(messages)
         new_messages = messages + [{"role": "assistant", "content": response.text}]
         now = datetime.now(timezone.utc)
+        
         updates = {
             "messages": new_messages,
             "updated_at": now,
@@ -32,11 +57,31 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             updates["created_at"] = now
         return updates
 
+    # Configuracion de la estructura del grafo
+    workflow.add_node("router", router_node)
     workflow.add_node("llm", llm_node)
     workflow.add_node("menu_specialist", menu_specialist_node)
-    workflow.set_entry_point("llm")
+
+    # Punto de entrada inicial
+    workflow.set_entry_point("router")
+
+    # Definicion de caminos condicionales basados en el analisis del router
+    workflow.add_conditional_edges(
+        "router",
+        route_intent,
+        {
+            "MENU": "menu_specialist", # Consultas de productos o precios
+            "GENERAL": "llm"            # Consultas generales o saludos
+        }
+    )
+
+    # El especialista inyecta contexto del menu y luego deriva al LLM para responder
+    workflow.add_edge("menu_specialist", "llm")
+    
+    # El flujo finaliza tras la respuesta del LLM
     workflow.add_edge("llm", END)
 
+    # Compilacion del grafo con persistencia opcional
     if checkpointer:
         return workflow.compile(checkpointer=checkpointer)
     return workflow.compile()
