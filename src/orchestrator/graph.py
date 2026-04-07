@@ -1,3 +1,4 @@
+from src.orchestrator.workers.menu_specialist import menu_specialist_node
 from langgraph.graph import StateGraph, END
 from src.orchestrator.state import DeliveryState
 from src.core.llm.base import BaseLLM
@@ -32,6 +33,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
         return updates
 
     workflow.add_node("llm", llm_node)
+    workflow.add_node("menu_specialist", menu_specialist_node)
     workflow.set_entry_point("llm")
     workflow.add_edge("llm", END)
 
