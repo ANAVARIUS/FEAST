@@ -3,9 +3,11 @@ uvicorn
 python-dotenv
 pyngrok
 langgraph
+langgraph-checkpoint-redis
 redis
 redisvl
 google-genai
 pydantic
 pydantic-settings
 requests
+google-api-core
