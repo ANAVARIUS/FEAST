@@ -9,3 +9,4 @@ PyMySQL==1.1.2
 pyngrok==8.0.0
 SQLAlchemy==2.0.49
 uvicorn==0.44.0
+requests==2.32.5

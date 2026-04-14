@@ -3,11 +3,20 @@ services:
     image: redis:latest
     ports:
       - "6379:6379"
-  
+
+  ngrok:
+      image: ngrok/ngrok:latest
+      restart: always
+      environment:
+        - NGROK_AUTHTOKEN=${NGROK_TOKEN}
+      command:
+        - "http"
+        - "app:8000"
+
   app:
     build: .
-    depends on:
+    depends_on:
       - redis
+      - ngrok
     ports:
       - "8000:8000"
-  
