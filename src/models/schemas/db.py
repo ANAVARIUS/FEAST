@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, UUID, ForeignKey, Integer, Numeric, DateTime, Boolean, func
+from sqlalchemy import String, UUID, ForeignKey, Integer, Numeric, DateTime, Boolean, MetaData, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
 from typing import List
 from src.infrastructure.repositories.connnect import db, SessionLocal, Base
