@@ -5,16 +5,17 @@ from datetime import datetime, timezone
 from typing import Optional, Any
 
 from src.orchestrator.workers.menu_specialist import menu_specialist_node
-from src.core.prompts import ROUTER_PROMPT # Importacion del prompt few-shot
+from src.orchestrator.workers.cart_manager import build_cart_manager_node
+from src.core.prompts import ROUTER_PROMPT
+
 
 def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
     workflow = StateGraph(state_schema=DeliveryState)
+    cart_manager_node = build_cart_manager_node(llm)
 
-    # Nodo de clasificacion: Determina la intencion del usuario
     async def router_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
-        
-        # 1. Recupera el mensaje mas reciente enviado por el humano
+
         last_message = ""
         for msg in reversed(messages):
             if isinstance(msg, dict) and msg.get("role") == "user":
@@ -24,64 +25,101 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
                 last_message = msg.content
                 break
 
-        # 2. Formatea el prompt con la tecnica Few-Shot
         prompt = ROUTER_PROMPT.format(user_message=last_message)
-        
-        # 3. Consulta al modelo de lenguaje (LLM)
         response = await llm.ainvoke([{"role": "user", "content": prompt}])
-        
-        # 4. Extrae la intencion detectada (MENU o GENERAL)
+        raw = (response.text or "").upper()
+
         intent = "GENERAL"
-        if "MENU" in response.text.upper():
+        if "UNKNOWN" in raw:
+            intent = "UNKNOWN"
+        elif "CART" in raw:
+            intent = "CART"
+        elif "MENU" in raw:
             intent = "MENU"
 
         return {"intent": intent}
 
-    # Logica de decision: Define el siguiente nodo segun la intencion
     def route_intent(state: DeliveryState) -> str:
         return state.get("intent", "GENERAL")
 
-    # Nodo generador: Redacta la respuesta final al cliente
+    async def decline_node(state: DeliveryState) -> dict:
+        text = (
+            "No puedo ayudarte con eso. Soy el asistente de FEAST Burgers: "
+            "puedo mostrarte el menú, armar tu carrito (agregar o quitar productos) "
+            "y resolver dudas del restaurante."
+        )
+        now = datetime.now(timezone.utc)
+        return {
+            "messages": [{"role": "assistant", "content": text}],
+            "updated_at": now,
+            "menu_digest": None,
+            "cart_digest": None,
+        }
+
     async def llm_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
-        
-        response = await llm.ainvoke(messages)
-        new_messages = messages + [{"role": "assistant", "content": response.text}]
+
+        grounding_parts = []
+        if state.get("menu_digest"):
+            grounding_parts.append(state["menu_digest"])
+        if state.get("cart_digest"):
+            grounding_parts.append(state["cart_digest"])
+        if state.get("order_phase"):
+            grounding_parts.append(
+                f"Estado del pedido (para alinear tu respuesta): {state['order_phase']}"
+            )
+
+        invoke_messages = list(messages)
+        if grounding_parts:
+            block = "\n\n".join(grounding_parts)
+            invoke_messages = [
+                {
+                    "role": "user",
+                    "content": (
+                        "[Contexto operativo FEAST — no es el cliente; "
+                        "úsalo solo para fundamentar tu respuesta al historial real.]\n\n"
+                        + block
+                    ),
+                }
+            ] + invoke_messages
+
+        response = await llm.ainvoke(invoke_messages)
         now = datetime.now(timezone.utc)
-        
+
         updates = {
-            "messages": new_messages,
+            "messages": [{"role": "assistant", "content": response.text}],
             "updated_at": now,
+            "menu_digest": None,
+            "cart_digest": None,
         }
         if state.get("created_at") is None:
             updates["created_at"] = now
         return updates
 
-    # Configuracion de la estructura del grafo
     workflow.add_node("router", router_node)
     workflow.add_node("llm", llm_node)
     workflow.add_node("menu_specialist", menu_specialist_node)
+    workflow.add_node("cart_manager", cart_manager_node)
+    workflow.add_node("decline", decline_node)
 
-    # Punto de entrada inicial
     workflow.set_entry_point("router")
 
-    # Definicion de caminos condicionales basados en el analisis del router
     workflow.add_conditional_edges(
         "router",
         route_intent,
         {
-            "MENU": "menu_specialist", # Consultas de productos o precios
-            "GENERAL": "llm"            # Consultas generales o saludos
-        }
+            "MENU": "menu_specialist",
+            "CART": "cart_manager",
+            "GENERAL": "llm",
+            "UNKNOWN": "decline",
+        },
     )
 
-    # El especialista inyecta contexto del menu y luego deriva al LLM para responder
     workflow.add_edge("menu_specialist", "llm")
-    
-    # El flujo finaliza tras la respuesta del LLM
+    workflow.add_edge("cart_manager", "llm")
     workflow.add_edge("llm", END)
+    workflow.add_edge("decline", END)
 
-    # Compilacion del grafo con persistencia opcional
     if checkpointer:
         return workflow.compile(checkpointer=checkpointer)
     return workflow.compile()

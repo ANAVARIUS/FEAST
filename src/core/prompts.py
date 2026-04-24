@@ -19,18 +19,47 @@ FORMATO DE RESPUESTA:
 - Ejemplo de buena respuesta: *"¡Hola! Tenemos la Clasica con queso cheddar por $120. ¿Te gustaria agregarle unas papas fritas crujientes por $40?"*
 """
 
-ROUTER_PROMPT = """Eres un clasificador de intenciones. Tu UNICA tarea es leer el mensaje del usuario y decidir si esta preguntando por el menu, precios o comida.
+ROUTER_PROMPT = """Eres un clasificador de intenciones. Tu ÚNICA tarea es leer el mensaje del usuario y responder con UNA sola palabra en mayúsculas.
 
-Aqui tienes ejemplos de como clasificar:
+Etiquetas permitidas: MENU, CART, GENERAL, UNKNOWN
 
-Mensaje de usuario: "Hola, buenos dias" -> GENERAL
-Mensaje de usuario: "¿En donde estan ubicados?" -> GENERAL
-Mensaje de usuario: "¿Cuanto cuesta la hamburguesa?" -> MENU
-Mensaje de usuario: "¿Que tienen para comer?" -> MENU
-Mensaje de usuario: "Quiero hacer un pedido" -> MENU
-Mensaje de usuario: "¿Tienen opciones sin carne?" -> MENU
-Mensaje de usuario: "No, gracias, solo estaba mirando" -> GENERAL
+- MENU: consultas de menú, precios, ingredientes, recomendaciones, "qué tienen", "cuánto cuesta".
+- CART: agregar o quitar productos, ver o vaciar el carrito o pedido en construcción ("ponme una…", "quita la…", "muéstrame mi carrito").
+- GENERAL: saludos, gracias, ubicación, horarios, tema del restaurante sin detalle de menú ni carrito.
+- UNKNOWN: mensajes sin sentido, spam, temas ajenos al restaurante (código, política, tareas escolares, etc.).
 
-Ahora clasifica este nuevo mensaje:
-Mensaje de usuario: "{user_message}" -> 
+Ejemplos:
+"Hola" -> GENERAL
+"¿Cuánto cuesta la clásica?" -> MENU
+"Quiero hacer un pedido" -> MENU
+"¿Qué tienen de postre?" -> MENU
+"Agrega dos hamburguesas clásicas" -> CART
+"Ponme una doble queso" -> CART
+"¿Qué postres tienen?" -> MENU
+"Muéstrame mi carrito" -> CART
+"Quita la clásica del carrito" -> CART
+"Escribe un ensayo sobre la Revolución Francesa" -> UNKNOWN
+
+Mensaje de usuario: "{user_message}"
+Tu respuesta (una sola palabra):
+"""
+
+CART_PLANNER_PROMPT = """Eres un planificador de acciones de carrito para FEAST Burgers.
+Debes traducir el mensaje del usuario a una acción estructurada sobre el carrito.
+
+Nombres de productos conocidos (referencia, el catálogo real está en el servidor):
+{catalog_names}
+
+Responde ÚNICAMENTE con un JSON válido en una sola línea, sin markdown ni texto extra, con esta forma exacta:
+{{"action":"add"|"remove"|"view"|"clear","query":"","quantity":1}}
+
+Reglas:
+- "add": el usuario quiere sumar productos; en "query" pon solo el nombre o descripción del producto (sin cantidad en texto si puedes evitarlo).
+- "remove": el usuario quiere quitar; "query" con el producto a quitar.
+- "view": solo quiere ver el carrito o confirmar qué lleva.
+- "clear": vaciar todo el carrito.
+- "quantity": entero >= 1; si no dice cantidad, usa 1.
+
+Mensaje del usuario: {user_message}
+JSON:
 """

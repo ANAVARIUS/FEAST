@@ -4,6 +4,7 @@ from src.api.Services.telegram_service import telegram_service_instance
 import logging
 import redis.asyncio as redis_async
 from src.core.config import config as app_config
+from src.infrastructure.redis.keyspace import session_key_pattern
 
 webhook_router = APIRouter()
 logging.basicConfig(level=logging.INFO)
@@ -13,7 +14,9 @@ async def set_ttl_for_thread(thread_id: str, ttl_seconds: int = 28800):
     """Establece TTL en todas las claves de Redis relacionadas con el thread."""
     try:
         redis_client = redis_async.from_url(app_config.redis_connection_string)
-        keys = await redis_client.keys(f"*{thread_id}*")
+        keys_cp = await redis_client.keys(f"*{thread_id}*")
+        keys_sess = await redis_client.keys(session_key_pattern(thread_id))
+        keys = list({*keys_cp, *keys_sess})
         if keys:
             # Usar pipeline para mayor eficiencia
             async with redis_client.pipeline() as pipe:
@@ -44,8 +47,17 @@ async def message_recept(request: Request):
     initial_state = {
         "messages": [user_message],
         "thread_id": chat_id,
+        "intent": None,
+        "cart": None,
+        "address": None,
+        "total": None,
+        "stock_validated": None,
+        "address_valid": None,
         "created_at": None,
         "updated_at": None,
+        "menu_digest": None,
+        "cart_digest": None,
+        "order_phase": None,
     }
 
     try:
