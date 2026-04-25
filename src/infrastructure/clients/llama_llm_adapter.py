@@ -87,5 +87,4 @@ class LlamaLLMAdapter(BaseLLM):
             error_message = f"LLM_ERROR: Can't invoke '{self._model}'. Reason: {str(e)}"
             return LLMResponse(text=error_message, raw=None)
 
-
 __all__ = ["LlamaLLMAdapter"]
