@@ -20,6 +20,14 @@ class Config(BaseSettings):
     gemini_max_tokens: int = 2048
     gemini_max_retries: int = 3
 
+    # Llama / AWS Bedrock
+    aws_region: str = Field(None, validation_alias="AWS_REGION")
+    aws_access_key_id: Optional[str] = Field(None, validation_alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: Optional[str] = Field(None, validation_alias="AWS_SECRET_ACCESS_KEY")
+    llama_model: str = Field(None, validation_alias="LLAMA_MODEL")
+    llama_temperature: float = 0
+    llama_max_tokens: int = 512
+
     # Redis
     redis_url: Optional[str] = Field(None, validation_alias="REDIS_URL")
     redis_host: str = "localhost"
