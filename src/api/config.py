@@ -5,7 +5,7 @@ import requests
 import logging
 
 from src.core.llm.base import BaseLLM
-from src.infrastructure.clients.llama_llm_adapter import LlamaLLMAdapter
+from src.infrastructure.clients.llm_factory import get_llm
 from src.core.redis_checkpointer import create_async_redis_checkpointer
 from src.orchestrator.graph import create_graph
 from src.core.config import config  
@@ -20,7 +20,7 @@ graph = None
 async def lifespan(app: FastAPI):
     global llm, checkpointer, graph
     print("Inicializando recursos...")
-    llm = LlamaLLMAdapter()
+    llm = get_llm()
     print("LLM inicializado")
     checkpointer = await create_async_redis_checkpointer()
     print("Checkpointer de Redis (async) creado")

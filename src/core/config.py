@@ -25,7 +25,7 @@ class Config(BaseSettings):
     aws_access_key_id: Optional[str] = Field(None, validation_alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: Optional[str] = Field(None, validation_alias="AWS_SECRET_ACCESS_KEY")
     llama_model: str = Field(None, validation_alias="LLAMA_MODEL")
-    llama_temperature: float = 0
+    llama_temperature: float = 0.5
     llama_max_tokens: int = 512
 
     # Redis
