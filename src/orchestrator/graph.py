@@ -1,12 +1,16 @@
-from langgraph.graph import StateGraph, END
-from src.orchestrator.state import DeliveryState
-from src.core.llm.base import BaseLLM
+import logging
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Any, Optional
 
-from src.orchestrator.workers.menu_specialist import menu_specialist_node
+from langgraph.graph import END, StateGraph
+
+from src.core.llm.base import BaseLLM
+from src.core.prompt_loader import build_router_prompt
+from src.orchestrator.state import DeliveryState
 from src.orchestrator.workers.cart_manager import build_cart_manager_node
-from src.core.prompts import ROUTER_PROMPT
+from src.orchestrator.workers.menu_specialist import menu_specialist_node
+
+logger = logging.getLogger(__name__)
 
 
 def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
@@ -15,19 +19,34 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
 
     async def router_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
+        thread_id = state.get("thread_id", "")
 
         last_message = ""
         for msg in reversed(messages):
             if isinstance(msg, dict) and msg.get("role") == "user":
                 last_message = msg.get("content", "")
                 break
-            elif hasattr(msg, "type") and msg.type == "human":
+            if hasattr(msg, "type") and msg.type == "human":
                 last_message = msg.content
                 break
 
-        prompt = ROUTER_PROMPT.format(user_message=last_message)
+        logger.info(
+            "Router: thread_id=%s mensaje_usuario_chars=%d",
+            thread_id,
+            len(last_message),
+        )
+        logger.debug("Router: extracto mensaje=%r", last_message[:500] if last_message else "")
+
+        prompt = build_router_prompt(user_message=last_message)
+        caps = llm.get_capabilities()
+        logger.debug(
+            "Router: invocando LLM proveedor=%s modelo=%s",
+            caps.get("provider"),
+            caps.get("model"),
+        )
         response = await llm.ainvoke([{"role": "user", "content": prompt}])
         raw = (response.text or "").upper()
+        logger.info("Router: respuesta cruda del modelo (trunc): %.200s", raw.strip())
 
         intent = "GENERAL"
         if "UNKNOWN" in raw:
@@ -36,13 +55,17 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             intent = "CART"
         elif "MENU" in raw:
             intent = "MENU"
+        elif "PAYMENT" in raw:
+            intent = "PAYMENT"
 
+        logger.info("Router: intención resuelta=%s", intent)
         return {"intent": intent}
 
     def route_intent(state: DeliveryState) -> str:
         return state.get("intent", "GENERAL")
 
     async def decline_node(state: DeliveryState) -> dict:
+        logger.info("Decline: respuesta fija por intención UNKNOWN u no soportada")
         text = (
             "No puedo ayudarte con eso. Soy el asistente de FEAST Burgers: "
             "puedo mostrarte el menú, armar tu carrito (agregar o quitar productos) "
@@ -58,12 +81,22 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
 
     async def llm_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
+        thread_id = state.get("thread_id", "")
+        intent = state.get("intent", "GENERAL")
 
         grounding_parts = []
         if state.get("menu_digest"):
             grounding_parts.append(state["menu_digest"])
+            logger.debug(
+                "LLM nodo: menu_digest presente (%d chars)",
+                len(state["menu_digest"]),
+            )
         if state.get("cart_digest"):
             grounding_parts.append(state["cart_digest"])
+            logger.debug(
+                "LLM nodo: cart_digest presente (%d chars)",
+                len(state["cart_digest"]),
+            )
         if state.get("order_phase"):
             grounding_parts.append(
                 f"Estado del pedido (para alinear tu respuesta): {state['order_phase']}"
@@ -82,8 +115,29 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
                     ),
                 }
             ] + invoke_messages
+            logger.info(
+                "LLM nodo: thread_id=%s intent_previo=%s mensajes_historial=%d contexto_inyectado=True",
+                thread_id,
+                intent,
+                len(messages),
+            )
+        else:
+            logger.info(
+                "LLM nodo: thread_id=%s intent_previo=%s mensajes_historial=%d contexto_inyectado=False",
+                thread_id,
+                intent,
+                len(messages),
+            )
 
+        caps = llm.get_capabilities()
+        logger.debug("LLM nodo: capacidades=%s", caps)
         response = await llm.ainvoke(invoke_messages)
+        out_preview = (response.text or "")[:300]
+        logger.info(
+            "LLM nodo: respuesta generada chars=%d preview=%r",
+            len(response.text or ""),
+            out_preview,
+        )
         now = datetime.now(timezone.utc)
 
         updates = {
@@ -111,6 +165,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             "MENU": "menu_specialist",
             "CART": "cart_manager",
             "GENERAL": "llm",
+            "PAYMENT": "llm",
             "UNKNOWN": "decline",
         },
     )
@@ -121,5 +176,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
     workflow.add_edge("decline", END)
 
     if checkpointer:
+        logger.info("Grafo LangGraph compilado con checkpointer Redis")
         return workflow.compile(checkpointer=checkpointer)
+    logger.info("Grafo LangGraph compilado sin checkpointer")
     return workflow.compile()

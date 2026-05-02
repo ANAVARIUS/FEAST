@@ -57,6 +57,13 @@ class GeminiLLM(BaseLLM):
                 # Convertir mensajes a diccionarios primero
                 dict_messages = self._convert_to_dict(messages)
                 contents = self._build_contents(dict_messages)
+                logger.debug(
+                    "Gemini: intento=%d/%d mensajes=%d roles=%s",
+                    attempt,
+                    self.max_retries,
+                    len(dict_messages),
+                    [m.get("role") for m in dict_messages],
+                )
                 config = types.GenerateContentConfig(
                     max_output_tokens=self.max_output_tokens,
                     temperature=self.temperature,
@@ -70,7 +77,15 @@ class GeminiLLM(BaseLLM):
                         "Responde en el mismo idioma que el usuario."
                     )
                 )
-                logger.debug(f"Mensajes enviados a Gemini: {contents}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    preview = []
+                    for c in contents[:6]:
+                        parts = c.get("parts") or []
+                        t = (parts[0].get("text") if parts else "") or ""
+                        preview.append(
+                            {"role": c.get("role"), "text_chars": len(t), "text_head": t[:120]}
+                        )
+                    logger.debug("Gemini: contenido_compacto=%s", preview)
                 response = self.client.models.generate_content(
                     model=self.model_name,
                     contents=contents,
@@ -78,7 +93,11 @@ class GeminiLLM(BaseLLM):
                 )
                 if not response or not response.text:
                     raise ValueError("Respuesta vacia de Gemini")
-                logger.info("Respuesta recibida correctamente")
+                logger.info(
+                    "Gemini: respuesta OK chars=%d modelo=%s",
+                    len(response.text),
+                    self.model_name,
+                )
                 return LLMResponse(text=response.text, raw=response)
             except (GoogleAPIError, RetryError, DeadlineExceeded) as e:
                 last_exception = e

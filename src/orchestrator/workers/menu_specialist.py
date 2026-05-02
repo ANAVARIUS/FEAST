@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from src.core.prompts import MENU_SPECIALIST_PROMPT
+from src.core.prompt_loader import build_menu_specialist_instructions
 from src.infrastructure.repositories.menu_repository import MenuRepository
 from src.orchestrator.state import DeliveryState
+
+logger = logging.getLogger(__name__)
 
 
 def _format_menu_digest(items: List[Any]) -> str:
@@ -35,9 +38,19 @@ async def menu_specialist_node(state: DeliveryState) -> Dict[str, Any]:
     Carga el catálogo desde BD y expone un `menu_digest` efímero para el nodo LLM.
     No apila SystemMessage en el historial (evita inflar tokens y checkpoints).
     """
+    thread_id = state.get("thread_id", "")
+    logger.info("MenuSpecialist: thread_id=%s cargando catálogo desde BD", thread_id)
+
     items = await asyncio.to_thread(MenuRepository.get_full_catalog)
+    logger.info("MenuSpecialist: productos_en_catalogo=%d", len(items))
+
     digest = _format_menu_digest(items)
-    prompt_block = f"{MENU_SPECIALIST_PROMPT}\n\n{digest}"
+    instructions = build_menu_specialist_instructions()
+    prompt_block = f"{instructions}\n\n{digest}"
+    logger.debug(
+        "MenuSpecialist: digest+instrucciones total_chars=%d",
+        len(prompt_block),
+    )
 
     now = datetime.now(timezone.utc)
     updates: Dict[str, Any] = {

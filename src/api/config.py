@@ -1,13 +1,19 @@
-from contextlib import asynccontextmanager
-from fastapi import FastAPI
-import time
-import requests
 import logging
+import time
+from contextlib import asynccontextmanager
 
+import requests
+from fastapi import FastAPI
+
+from src.core.config import config
 from src.core.llm.gemini import GeminiLLM
+from src.core.logging_setup import configure_logging
 from src.core.redis_checkpointer import create_async_redis_checkpointer
 from src.orchestrator.graph import create_graph
-from src.core.config import config  
+
+configure_logging()
+
+logger = logging.getLogger(__name__)
 
 Telegram_key = config.telegram_token
 
@@ -15,27 +21,32 @@ llm = None
 checkpointer = None
 graph = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global llm, checkpointer, graph
-    print("Inicializando recursos...")
+    logger.info("Lifespan: inicializando LLM, checkpointer y grafo…")
     llm = GeminiLLM()
-    print("LLM inicializado")
+    logger.info("Lifespan: LLM listo (%s)", llm.get_capabilities())
     checkpointer = await create_async_redis_checkpointer()
-    print("Checkpointer de Redis (async) creado")
+    logger.info("Lifespan: AsyncRedisSaver configurado")
     graph = create_graph(llm, checkpointer)
-    print("Grafo compilado")
+    logger.info("Lifespan: grafo compilado; aplicación lista para tráfico")
     yield
-    print("Cerrando recursos...")
+    logger.info("Lifespan: apagado de la aplicación")
+
 
 app = FastAPI(lifespan=lifespan)
+
 
 def get_docker_ngrok_url(retries=5):
     time.sleep(1)
     try:
         response = requests.get("http://ngrok:4040/api/tunnels")
         data = response.json()
-        return data['tunnels'][0]['public_url']
+        url = data["tunnels"][0]["public_url"]
+        logger.info("Ngrok URL obtenida: %s", url)
+        return url
     except Exception as e:
-        print(f"Could not connect to ngrok API: {e}")
+        logger.warning("No se pudo obtener URL de ngrok: %s", e)
         return None

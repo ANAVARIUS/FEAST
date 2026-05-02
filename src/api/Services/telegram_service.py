@@ -1,5 +1,11 @@
+import logging
+
 import requests
+
 from src.core.config import config
+
+logger = logging.getLogger(__name__)
+
 
 class TelegramService:
     _instance = None
@@ -19,8 +25,23 @@ class TelegramService:
             "text": texto,
             "parse_mode": "HTML"
         }
-        response = requests.post(url, json=payload)
-        return response.json()
+        logger.info(
+            "Telegram API sendMessage chat_id=%s texto_chars=%d",
+            chat_id,
+            len(texto or ""),
+        )
+        response = requests.post(url, json=payload, timeout=30)
+        data = response.json()
+        if not response.ok or not data.get("ok"):
+            logger.error(
+                "Telegram API error HTTP=%s ok=%s description=%s",
+                response.status_code,
+                data.get("ok"),
+                data.get("description"),
+            )
+        else:
+            logger.debug("Telegram API message_id=%s", data.get("result", {}).get("message_id"))
+        return data
 
 
 telegram_service_instance = TelegramService()

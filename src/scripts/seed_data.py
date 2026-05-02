@@ -1,9 +1,5 @@
 import uuid
 from datetime import datetime
-from pathlib import Path
-import subprocess
-import sys
-from sqlalchemy import inspect
 from src.models.schemas.db import (
     create_status, 
     create_branch, 
@@ -19,38 +15,21 @@ from src.models.schemas.db import (
     create_delivery,
     add_ingredient_to_branch
 )
-from src.infrastructure.repositories.connnect import db
-
-
-def ensure_schema_ready():
-    inspector = inspect(db)
-    if inspector.has_table("Status"):
-        return
-
-    project_root = Path(__file__).resolve().parents[2]
-    print("Esquema no detectado. Ejecutando migraciones (alembic upgrade head)...")
-    subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        check=True,
-        cwd=project_root,
-    )
-    print("Migraciones aplicadas.")
 
 def seed_database():
     try:
-        ensure_schema_ready()
         st_pend = create_status("Pendiente", 1)
         st_prep = create_status("Preparando", 2)
         st_env  = create_status("Enviado", 3)
         st_ent  = create_status("Entregado", 4)
-        print("Estados creados.")
+        print("✅ Estados creados.")
 
         sucursal = create_branch(
             name="Pizza Planeta Centro", 
             address="Av. Galaxia 42", 
             phone="555-0123"
         )
-        print(f"Sucursal creada: {sucursal.Name}")
+        print(f"✅ Sucursal creada: {sucursal.Name}")
 
         usuario = create_user(
             name="Arturo", 
@@ -68,9 +47,9 @@ def seed_database():
             zip_code="44160",
             ext_num="500"
         )
-        print(f"Usuario {usuario.Name} y dirección registrados.")
+        print(f"✅ Usuario {usuario.Name} y dirección registrados.")
         repartidor = create_delivery_person("Carlos", "Veloz", "3398765432")
-        print(f"Repartidor {repartidor.Name} registrado.")
+        print(f"✅ Repartidor {repartidor.Name} registrado.")
         ing_queso = create_ingredient("Extra Queso")
         ing_masa = create_ingredient("Orilla de Queso")
         
@@ -80,7 +59,7 @@ def seed_database():
         add_ingredient_to_item(ing_queso.IngredientID, platillo.ItemID, 1)
         add_item_to_branch(sucursal.BranchID, platillo.ItemID, True)
         add_item_to_branch(sucursal.BranchID, refresco.ItemID, True)
-        print("Menú e ingredientes configurados.")
+        print("✅ Menú e ingredientes configurados.")
 
         orden = create_order(
             user_id=usuario.UserID,
@@ -91,7 +70,7 @@ def seed_database():
         
         add_item_to_order(orden.OrderID, platillo.ItemID, 1)
         add_item_to_order(orden.OrderID, refresco.ItemID, 1)
-        print(f"Orden {orden.OrderID} creada con productos.")
+        print(f"✅ Orden {orden.OrderID} creada con productos.")
 
         entrega = create_delivery(
             order_id=orden.OrderID,
@@ -99,7 +78,7 @@ def seed_database():
             status_id=st_env.StatusID,
             estimated_time=datetime.utcnow()
         )
-        print(f"Entrega asignada a {repartidor.Name}.")
+        print(f"✅ Entrega asignada a {repartidor.Name}.")
 
         add_ingredient_to_branch(
             branch_id=sucursal.BranchID, 
@@ -111,7 +90,7 @@ def seed_database():
             ingredient_id=ing_masa.IngredientID, 
             available=True
         )
-        print(f"Inventario de ingredientes vinculado a {sucursal.Name}.")
+        print(f"✅ Inventario de ingredientes vinculado a {sucursal.Name}.")
 
         print("¡Poblado completado con éxito!")
         

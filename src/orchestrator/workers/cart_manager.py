@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from src.core.llm.base import BaseLLM
-from src.core.prompts import CART_PLANNER_PROMPT
+from src.core.prompt_loader import build_cart_planner_prompt
 from src.infrastructure.redis import CartLine, ConversationSessionStore
 from src.infrastructure.repositories.menu_repository import MenuRepository
 from src.orchestrator.state import DeliveryState
@@ -97,19 +97,34 @@ def _sync_catalog_names() -> str:
 
 async def _plan_with_llm(llm: BaseLLM, user_message: str) -> Dict[str, Any]:
     catalog = await asyncio.to_thread(_sync_catalog_names)
-    prompt = CART_PLANNER_PROMPT.format(
+    prompt = build_cart_planner_prompt(
         user_message=user_message,
         catalog_names=catalog,
     )
+    logger.debug("CartPlanner: prompt_chars=%d", len(prompt))
+    caps = llm.get_capabilities()
+    logger.info(
+        "CartPlanner: invocando LLM provider=%s model=%s",
+        caps.get("provider"),
+        caps.get("model"),
+    )
     resp = await llm.ainvoke([{"role": "user", "content": prompt}])
+    logger.debug("CartPlanner: respuesta_llm_chars=%d", len(resp.text or ""))
     parsed = _extract_json_object(resp.text)
     if parsed and isinstance(parsed, dict) and "action" in parsed:
-        return {
+        plan = {
             "action": str(parsed.get("action", "view")).lower(),
             "query": str(parsed.get("query", "")),
             "quantity": int(parsed.get("quantity", 1) or 1),
         }
-    return _heuristic_plan(user_message.lower())
+        logger.info("CartPlanner: JSON parseado action=%s qty=%s query=%r", plan["action"], plan["quantity"], plan["query"][:120])
+        return plan
+    heur = _heuristic_plan(user_message.lower())
+    logger.warning(
+        "CartPlanner: fallback heurístico (JSON inválido o ausente) action=%s",
+        heur.get("action"),
+    )
+    return heur
 
 
 def _mutate_cart(
@@ -182,12 +197,17 @@ def build_cart_manager_node(llm: BaseLLM) -> Callable[..., Any]:
     async def cart_manager_node(state: DeliveryState) -> Dict[str, Any]:
         thread_id = state.get("thread_id") or ""
         user_message = _last_user_text(state.get("messages", []))
+        logger.info(
+            "CartManager: thread_id=%s user_chars=%d",
+            thread_id,
+            len(user_message),
+        )
 
         plan = await _plan_with_llm(llm, user_message)
         if plan["quantity"] < 1:
             plan["quantity"] = 1
 
-        async def mutator(payload):
+        def mutator(payload):
             new_lines, op_note = _mutate_cart(
                 list(payload.cart),
                 plan["action"],
@@ -203,6 +223,12 @@ def build_cart_manager_node(llm: BaseLLM) -> Callable[..., Any]:
                 payload.flags["last_cart_op"] = op_note
 
         payload = await _store.merge_update(str(thread_id), mutator=mutator)
+        logger.info(
+            "CartManager: carrito_actual lineas=%d total=%.2f fase=%s",
+            len(payload.cart),
+            sum(ln.price * ln.quantity for ln in payload.cart),
+            payload.order_phase,
+        )
 
         digest = _format_cart_digest(
             payload.cart,
