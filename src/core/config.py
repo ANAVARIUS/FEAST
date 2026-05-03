@@ -38,6 +38,13 @@ class Config(BaseSettings):
     redis_db: int = 0
     redis_password: Optional[str] = None
 
+    # Stripe (checkout al finalizar pedido; opcional hasta configurar STRIPE_SECRET_KEY)
+    stripe_secret_key: Optional[str] = Field(None, validation_alias="STRIPE_SECRET_KEY")
+    stripe_currency: str = Field("mxn", validation_alias="STRIPE_CURRENCY")
+    public_base_url: Optional[str] = Field(None, validation_alias="PUBLIC_BASE_URL")
+    stripe_success_url: Optional[str] = Field(None, validation_alias="STRIPE_SUCCESS_URL")
+    stripe_cancel_url: Optional[str] = Field(None, validation_alias="STRIPE_CANCEL_URL")
+
     # App (LOG_LEVEL en .env: DEBUG, INFO, WARNING, …)
     log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
     max_history_length: int = 50

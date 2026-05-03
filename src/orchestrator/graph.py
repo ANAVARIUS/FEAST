@@ -9,6 +9,7 @@ from src.core.prompt_loader import build_router_prompt
 from src.orchestrator.state import DeliveryState
 from src.orchestrator.workers.cart_manager import build_cart_manager_node
 from src.orchestrator.workers.menu_specialist import menu_specialist_node
+from src.orchestrator.workers.payment_checkout import build_payment_checkout_node
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
     workflow = StateGraph(state_schema=DeliveryState)
     cart_manager_node = build_cart_manager_node(llm)
+    payment_checkout_node = build_payment_checkout_node()
 
     async def router_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
@@ -55,6 +57,8 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             intent = "CART"
         elif "MENU" in raw:
             intent = "MENU"
+        elif "CHECKOUT" in raw:
+            intent = "CHECKOUT"
         elif "PAYMENT" in raw:
             intent = "PAYMENT"
 
@@ -154,6 +158,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
     workflow.add_node("llm", llm_node)
     workflow.add_node("menu_specialist", menu_specialist_node)
     workflow.add_node("cart_manager", cart_manager_node)
+    workflow.add_node("payment_checkout", payment_checkout_node)
     workflow.add_node("decline", decline_node)
 
     workflow.set_entry_point("router")
@@ -166,12 +171,14 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             "CART": "cart_manager",
             "GENERAL": "llm",
             "PAYMENT": "llm",
+            "CHECKOUT": "payment_checkout",
             "UNKNOWN": "decline",
         },
     )
 
     workflow.add_edge("menu_specialist", "llm")
     workflow.add_edge("cart_manager", "llm")
+    workflow.add_edge("payment_checkout", END)
     workflow.add_edge("llm", END)
     workflow.add_edge("decline", END)
 

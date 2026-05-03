@@ -9,6 +9,7 @@ from src.core.config import config
 from src.core.llm.gemini import GeminiLLM
 from src.core.logging_setup import configure_logging
 from src.core.redis_checkpointer import create_async_redis_checkpointer
+from src.api.endpoints.pay_pages import pay_router
 from src.orchestrator.graph import create_graph
 
 configure_logging()
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(pay_router)
 
 
 def get_docker_ngrok_url(retries=5):
