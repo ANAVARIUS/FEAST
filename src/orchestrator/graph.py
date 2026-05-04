@@ -30,16 +30,20 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
         # 3. Consulta al modelo de lenguaje (LLM)
         response = await llm.ainvoke([{"role": "user", "content": prompt}])
         
-        # 4. Extrae la intencion detectada (MENU o GENERAL)
-        intent = "GENERAL"
-        if "MENU" in response.text.upper():
+        # 4. Extrae la intencion detectada
+        res_text = response.text.upper()
+        if "MENU" in res_text:
             intent = "MENU"
+        elif "GENERAL" in res_text:
+            intent = "GENERAL"
+        else:
+            intent = "FALLBACK"  # Si no es nada de lo anterior o el LLM detecta abuso
 
         return {"intent": intent}
 
     # Logica de decision: Define el siguiente nodo segun la intencion
     def route_intent(state: DeliveryState) -> str:
-        return state.get("intent", "GENERAL")
+        return state.get("intent", "FALLBACK")
 
     # Nodo generador: Redacta la respuesta final al cliente
     async def llm_node(state: DeliveryState) -> dict:
@@ -57,10 +61,22 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             updates["created_at"] = now
         return updates
 
+    async def fallback_node(state: DeliveryState) -> dict:
+        fallback_message = {
+            "role": "assistant",
+            "content": "Lo siento, no puedo ayudarte con ese tema, ya que mi especialidad es gestionar tus pedidos. Pero no te preocupes, podemos continuar con tu orden justo donde la dejaste. ¿Deseas ver el menú o revisar tu carrito?"
+        }
+
+        return {
+            "messages": state.get("messages", []) + [fallback_message],
+            "updated_at": datetime.now(timezone.utc)
+        }
+
     # Configuracion de la estructura del grafo
     workflow.add_node("router", router_node)
     workflow.add_node("llm", llm_node)
     workflow.add_node("menu_specialist", menu_specialist_node)
+    workflow.add_node("fallback", fallback_node)
 
     # Punto de entrada inicial
     workflow.set_entry_point("router")
@@ -71,7 +87,8 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
         route_intent,
         {
             "MENU": "menu_specialist", # Consultas de productos o precios
-            "GENERAL": "llm"            # Consultas generales o saludos
+            "GENERAL": "llm", # Consultas generales o saludos
+            "FALLBACK": "fallback" # Nueva ruta de seguridad
         }
     )
 
@@ -80,6 +97,8 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
     
     # El flujo finaliza tras la respuesta del LLM
     workflow.add_edge("llm", END)
+
+    workflow.add_edge("fallback", END)
 
     # Compilacion del grafo con persistencia opcional
     if checkpointer:

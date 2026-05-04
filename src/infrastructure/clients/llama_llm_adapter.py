@@ -14,51 +14,6 @@ from src.core.llm.types import ChatMessage
 
 logger = logging.getLogger(__name__)
 
-
-def _messages_to_prompt(messages: List[ChatMessage]) -> str:
-    """
-    Formato de instrucciones nativo para Llama 3.
-    Soporta tanto diccionarios como objetos (ej. HumanMessage de LangChain).
-    """
-    system_instruction = (
-        "Eres un asistente conversacional útil y natural. "
-        "Tienes acceso al historial completo de la conversación, pero debes usarlo únicamente para entender el contexto y responder de manera coherente. "
-        "No menciones información del historial a menos que sea directamente relevante para la pregunta actual o que el usuario te lo pida explícitamente. "
-        "Responde como lo haría un humano que recuerda la conversación pero no repite constantemente lo que ya sabe. "
-        "Responde en el mismo idioma que el usuario."
-    )
-    
-    parts: List[str] = ["<|begin_of_text|>"]
-    
-    # Agregar instrucción de sistema al inicio
-    parts.append(f"<|start_header_id|>system<|end_header_id|>\n{system_instruction}\n<|eot_id|>\n")
-    
-    for m in messages:
-        if isinstance(m, dict):
-            role = m.get("role") or "user"
-            content = m.get("content") or ""
-        else:
-            # Soporte para objetos como HumanMessage, AIMessage, etc.
-            # LangChain usa 'type' o 'role' según la versión/clase.
-            # Intentamos obtener el rol de varias maneras comunes.
-            role = getattr(m, "role", None) or getattr(m, "type", "user")
-            content = getattr(m, "content", "")
-            
-        if not content:
-            continue
-            
-        # Normalizar roles de LangChain a roles de Llama
-        if role == "human":
-            role = "user"
-        elif role == "ai":
-            role = "assistant"
-            
-        parts.append(f"<|start_header_id|>{role}<|end_header_id|>\n{content}\n<|eot_id|>\n")
-        
-    parts.append("<|start_header_id|>assistant<|end_header_id|>\n")
-    return "".join(parts)
-
-
 class LlamaLLMAdapter(BaseLLM):
     """
     Adaptador concreto para el modelo Llama de Meta vía AWS Bedrock.
@@ -124,11 +79,15 @@ class LlamaLLMAdapter(BaseLLM):
     def _invoke_with_retries(self, messages: List[ChatMessage]) -> LLMResponse:
         # 1. Definir las instrucciones de sistema en el formato Converse
         system_instruction = (
-            "Eres un asistente conversacional útil y natural. "
-            "Tienes acceso al historial completo de la conversación, pero debes usarlo únicamente para entender el contexto y responder de manera coherente. "
-            "No menciones información del historial a menos que sea directamente relevante para la pregunta actual o que el usuario te lo pida explícitamente. "
-            "Responde como lo haría un humano que recuerda la conversación pero no repite constantemente lo que ya sabe. "
-            "Responde en el mismo idioma que el usuario."
+            "Eres un agente virtual de un restaurante encargado exclusivamente de recibir, "
+            "gestionar y confirmar pedidos de comida. Tu función es guiar al cliente de "
+            "forma clara y eficiente: mostrar el menú cuando sea necesario, resolver dudas "
+            "sobre platillos, ingredientes, precios, disponibilidad y tiempos de entrega, "
+            "tomar pedidos con precisión, y confirmar todos los detalles antes de finalizar. "
+            "Puedes usar un tono amable y cercano, con pocos emojis si encajan, "
+            "pero manteniendo profesionalismo. Si el usuario hace preguntas que no estén "
+            "directamente relacionadas con el menú, la comida o el proceso de pedido, debes "
+            "rechazar cortésmente responder y redirigir la conversación al objetivo del pedido."
         )
         system_prompts = [{"text": system_instruction}]
 
@@ -173,7 +132,7 @@ class LlamaLLMAdapter(BaseLLM):
             try:
                 # 4. Usar la API converse en lugar de invoke_model
                 response = self._client.converse(
-                    modelId=self._model,  # ¡Recuerda pasar "us.meta.llama4..." aquí!
+                    modelId=self._model,
                     messages=bedrock_messages,
                     system=system_prompts,
                     inferenceConfig=inference_config
