@@ -1,8 +1,11 @@
+alembic==1.18.4
+boto3>=1.34.0,<2
 fastapi==0.135.3
 google-api-core==2.30.3
 google-genai==1.72.0
 langgraph==1.1.6
 langgraph-checkpoint-redis==0.4.0
+redis==5.2.1
 pip==26.0.1
 pydantic-settings==2.13.1
 PyMySQL==1.1.2

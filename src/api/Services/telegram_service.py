@@ -1,3 +1,5 @@
+import logging
+
 import requests
 from src.core.config import config
 
@@ -20,6 +22,7 @@ class TelegramService:
             "parse_mode": "HTML"
         }
         response = requests.post(url, json=payload)
+        logging.info(f"Respuesta: {texto}")
         return response.json()
 
 

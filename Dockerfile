@@ -6,12 +6,16 @@ COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-RUN useradd -m appuser
+COPY . .
+
+RUN chmod +x /app/entrypoint.sh
+
+RUN useradd -m appuser && chown -R appuser /app
 
 USER appuser
 
-COPY . .
-
 EXPOSE 8000
+
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["python", "-m", "src.api.main"]
