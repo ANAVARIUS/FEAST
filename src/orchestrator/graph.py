@@ -7,7 +7,13 @@ from typing import Optional, Any
 from src.orchestrator.workers.menu_specialist import menu_specialist_node
 from src.core.prompts import ROUTER_PROMPT # Importacion del prompt few-shot
 
-def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
+
+def route_intent(state: DeliveryState) -> str:
+    """Enruta segun `intent` del estado (router -> nodo siguiente). Expuesto para pruebas (STD CP-UNIT-GRAPH-*)."""
+    return state.get("intent", "GENERAL")
+
+
+def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
     workflow = StateGraph(state_schema=DeliveryState)
 
     # Nodo de clasificacion: Determina la intencion del usuario
@@ -36,10 +42,6 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             intent = "MENU"
 
         return {"intent": intent}
-
-    # Logica de decision: Define el siguiente nodo segun la intencion
-    def route_intent(state: DeliveryState) -> str:
-        return state.get("intent", "GENERAL")
 
     # Nodo generador: Redacta la respuesta final al cliente
     async def llm_node(state: DeliveryState) -> dict:
