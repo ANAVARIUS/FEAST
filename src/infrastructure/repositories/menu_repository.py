@@ -73,7 +73,7 @@ class MenuRepository:
     def get_item_details(item_id: uuid.UUID) -> Optional[Dict[str, Any]]:
         """
         Obtiene los detalles de un producto específico, incluyendo su receta (ingredientes).
-        Útil si el usuario pregunta "¿Qué lleva la hamburguesa?".
+        Útil si el usuario pregunta por ingredientes o composición de un platillo concreto.
         """
         with get_session() as session:
             item = session.get(Item, item_id)
@@ -99,7 +99,7 @@ class MenuRepository:
 
     @staticmethod
     def get_menu_by_category(branch_id: uuid.UUID, category: str) -> List[Dict[str, Any]]:
-        """Filtra el menú de una sucursal por una categoría específica (ej. 'Hamburguesas')."""
+        """Filtra el menú de una sucursal por una categoría específica (ej. bebidas, postres)."""
         with get_session() as session:
             menu_items = (
                 session.query(BranchItem, Item)

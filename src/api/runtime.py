@@ -5,14 +5,13 @@ from typing import Optional
 import requests
 from fastapi import FastAPI
 
-from src.core.config import config
-from src.core.logging_setup import configure_logging
+from src.core.config import config, setup_logging
 from src.core.redis_checkpointer import create_async_redis_checkpointer
 from src.infrastructure.llm.factory import get_llm
 from src.api.endpoints.pay_pages import pay_router
 from src.orchestrator.graph import create_graph
 
-configure_logging()
+setup_logging()
 logger = logging.getLogger(__name__)
 
 llm = None
@@ -23,14 +22,14 @@ graph = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global llm, checkpointer, graph
-    logger.info("Runtime lifespan: creando LLM vía factory (LLM_PROVIDER=%s)", config.llm_provider)
+    logger.info("[app] init llm_provider=%s", config.llm_provider)
     llm = get_llm()
-    logger.info("Runtime lifespan: LLM=%s", llm.get_capabilities())
+    logger.info("[app] llm %s", llm.get_capabilities())
     checkpointer = await create_async_redis_checkpointer()
     graph = create_graph(llm, checkpointer)
-    logger.info("Runtime lifespan: grafo listo")
+    logger.info("[app] ready")
     yield
-    logger.info("Runtime lifespan: shutdown")
+    logger.info("[app] shutdown")
 
 
 app = FastAPI(lifespan=lifespan)

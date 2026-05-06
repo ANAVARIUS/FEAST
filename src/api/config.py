@@ -5,20 +5,21 @@ from contextlib import asynccontextmanager
 import requests
 from fastapi import FastAPI
 
-from src.core.config import config
-from src.core.llm.gemini import GeminiLLM
-from src.core.logging_setup import configure_logging
-from src.core.redis_checkpointer import create_async_redis_checkpointer
 from src.api.endpoints.pay_pages import pay_router
+from src.api.endpoints.stripe_webhook import router as stripe_webhook_router
+from src.core.config import config, setup_logging
+from src.core.llm.base import BaseLLM
+from src.core.redis_checkpointer import create_async_redis_checkpointer
+from src.infrastructure.clients.llm_factory import get_llm
 from src.orchestrator.graph import create_graph
 
-configure_logging()
+setup_logging()
 
 logger = logging.getLogger(__name__)
 
 Telegram_key = config.telegram_token
 
-llm = None
+llm: BaseLLM | None = None
 checkpointer = None
 graph = None
 
@@ -26,19 +27,19 @@ graph = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global llm, checkpointer, graph
-    logger.info("Lifespan: inicializando LLM, checkpointer y grafo…")
-    llm = GeminiLLM()
-    logger.info("Lifespan: LLM listo (%s)", llm.get_capabilities())
+    logger.info("[app] init llm+redis+graph")
+    llm = get_llm()
+    logger.info("[app] llm %s", llm.get_capabilities())
     checkpointer = await create_async_redis_checkpointer()
-    logger.info("Lifespan: AsyncRedisSaver configurado")
     graph = create_graph(llm, checkpointer)
-    logger.info("Lifespan: grafo compilado; aplicación lista para tráfico")
+    logger.info("[app] ready")
     yield
-    logger.info("Lifespan: apagado de la aplicación")
+    logger.info("[app] shutdown")
 
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(pay_router)
+app.include_router(stripe_webhook_router)
 
 
 def get_docker_ngrok_url(retries=5):
@@ -47,8 +48,8 @@ def get_docker_ngrok_url(retries=5):
         response = requests.get("http://ngrok:4040/api/tunnels")
         data = response.json()
         url = data["tunnels"][0]["public_url"]
-        logger.info("Ngrok URL obtenida: %s", url)
+        logger.info("[app] ngrok %s", url)
         return url
     except Exception as e:
-        logger.warning("No se pudo obtener URL de ngrok: %s", e)
+        logger.warning("[app] ngrok error: %s", e)
         return None

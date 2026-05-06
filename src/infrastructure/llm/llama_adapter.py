@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 from src.core.config import Config
 from src.core.llm.base import BaseLLM, LLMResponse
 from src.core.llm.types import ChatMessage
+from src.core.prompt_loader import FEAST_BEDROCK_SYSTEM_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class LlamaLLMAdapter(BaseLLM):
             self._region,
             len(messages),
         )
-        system_prompts = [{"text": "Eres un asistente conversacional de FEAST. Responde con precision y en el idioma del usuario."}]
+        system_prompts = [{"text": FEAST_BEDROCK_SYSTEM_INSTRUCTION}]
         bedrock_messages: List[Dict[str, Any]] = []
         for msg in messages:
             role = (msg.get("role") or "user").lower()

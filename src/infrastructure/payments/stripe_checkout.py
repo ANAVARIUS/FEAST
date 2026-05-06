@@ -68,4 +68,7 @@ def create_checkout_session(
         cancel_url=cancel,
         client_reference_id=thread_id[:255],
         metadata={"telegram_chat_id": thread_id[:500]},
+        payment_intent_data={
+            "metadata": {"telegram_chat_id": thread_id[:500]},
+        },
     )

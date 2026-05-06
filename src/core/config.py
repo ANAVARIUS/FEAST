@@ -1,4 +1,5 @@
-import os
+import logging
+import sys
 from typing import Optional
 
 from pydantic import Field
@@ -44,6 +45,7 @@ class Config(BaseSettings):
     public_base_url: Optional[str] = Field(None, validation_alias="PUBLIC_BASE_URL")
     stripe_success_url: Optional[str] = Field(None, validation_alias="STRIPE_SUCCESS_URL")
     stripe_cancel_url: Optional[str] = Field(None, validation_alias="STRIPE_CANCEL_URL")
+    stripe_webhook_secret: Optional[str] = Field(None, validation_alias="STRIPE_WEBHOOK_SECRET")
 
     # App (LOG_LEVEL en .env: DEBUG, INFO, WARNING, …)
     log_level: str = Field("INFO", validation_alias="LOG_LEVEL")
@@ -69,3 +71,25 @@ class Config(BaseSettings):
 
 # Instancia global para usar en toda la aplicación
 config = Config()
+
+
+def setup_logging() -> None:
+    """Configura logging una vez (basicConfig). LOG_LEVEL vía .env."""
+    name = (config.log_level or "INFO").upper()
+    level = getattr(logging, name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+        force=True,
+    )
+    for noisy in (
+        "httpx",
+        "httpcore",
+        "urllib3",
+        "stripe",
+        "botocore",
+        "boto3",
+    ):
+        logging.getLogger(noisy).setLevel(logging.WARNING)

@@ -44,9 +44,9 @@ async def create_async_redis_checkpointer(
     log = logging.getLogger(__name__)
     url = redis_url or get_redis_url()
     redacted = url.split("@")[-1] if "@" in url else url
-    log.info("Redis checkpointer: conectando (host/parte final): %s", redacted)
+    log.info("[checkpoint:redis] connect %s", redacted)
     saver = AsyncRedisSaver(redis_url=url)
     if do_setup and hasattr(saver, "asetup"):
         await saver.asetup()
-        log.debug("Redis checkpointer: asetup completado")
+        log.debug("[checkpoint:redis] asetup ok")
     return saver

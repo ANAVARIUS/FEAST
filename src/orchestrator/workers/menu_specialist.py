@@ -39,18 +39,15 @@ async def menu_specialist_node(state: DeliveryState) -> Dict[str, Any]:
     No apila SystemMessage en el historial (evita inflar tokens y checkpoints).
     """
     thread_id = state.get("thread_id", "")
-    logger.info("MenuSpecialist: thread_id=%s cargando catálogo desde BD", thread_id)
+    logger.info("[worker:menu] thread=%s load_catalog", thread_id)
 
     items = await asyncio.to_thread(MenuRepository.get_full_catalog)
-    logger.info("MenuSpecialist: productos_en_catalogo=%d", len(items))
+    logger.info("[worker:menu] thread=%s items=%d", thread_id, len(items))
 
     digest = _format_menu_digest(items)
     instructions = build_menu_specialist_instructions()
     prompt_block = f"{instructions}\n\n{digest}"
-    logger.debug(
-        "MenuSpecialist: digest+instrucciones total_chars=%d",
-        len(prompt_block),
-    )
+    logger.debug("[worker:menu] digest_chars=%d", len(prompt_block))
 
     now = datetime.now(timezone.utc)
     updates: Dict[str, Any] = {

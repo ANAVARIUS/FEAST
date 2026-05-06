@@ -1,13 +1,32 @@
 """Páginas mínimas de redirección tras Stripe Checkout (éxito / cancelación)."""
 
+import logging
+from typing import Optional
+
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
+from src.api.endpoints.stripe_webhook import notify_telegram_if_checkout_paid
+
 pay_router = APIRouter(tags=["payments"])
+logger = logging.getLogger(__name__)
 
 
 @pay_router.get("/pay/success", response_class=HTMLResponse)
-async def pay_success() -> HTMLResponse:
+async def pay_success(session_id: Optional[str] = None) -> HTMLResponse:
+    """Stripe sustituye {CHECKOUT_SESSION_ID} en la URL; con eso confirmamos pago y avisamos a Telegram."""
+    if session_id:
+        logger.info("[pay:success] page hit session_id=%s...", session_id[:24])
+        try:
+            await notify_telegram_if_checkout_paid(session_id)
+        except Exception as e:
+            logger.error("[pay:success] notify error: %s", e, exc_info=True)
+    else:
+        logger.warning(
+            "[pay:success] sin session_id en la URL; no se puede notificar Telegram "
+            "(revisa STRIPE_SUCCESS_URL / PUBLIC_BASE_URL con ?session_id={CHECKOUT_SESSION_ID})",
+        )
+
     body = """
     <!DOCTYPE html>
     <html lang="es">

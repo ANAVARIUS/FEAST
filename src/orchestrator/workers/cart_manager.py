@@ -101,15 +101,15 @@ async def _plan_with_llm(llm: BaseLLM, user_message: str) -> Dict[str, Any]:
         user_message=user_message,
         catalog_names=catalog,
     )
-    logger.debug("CartPlanner: prompt_chars=%d", len(prompt))
+    logger.debug("[worker:cart:plan] prompt_chars=%d", len(prompt))
     caps = llm.get_capabilities()
     logger.info(
-        "CartPlanner: invocando LLM provider=%s model=%s",
+        "[worker:cart:plan] llm provider=%s model=%s",
         caps.get("provider"),
         caps.get("model"),
     )
     resp = await llm.ainvoke([{"role": "user", "content": prompt}])
-    logger.debug("CartPlanner: respuesta_llm_chars=%d", len(resp.text or ""))
+    logger.debug("[worker:cart:plan] reply_chars=%d", len(resp.text or ""))
     parsed = _extract_json_object(resp.text)
     if parsed and isinstance(parsed, dict) and "action" in parsed:
         plan = {
@@ -117,11 +117,16 @@ async def _plan_with_llm(llm: BaseLLM, user_message: str) -> Dict[str, Any]:
             "query": str(parsed.get("query", "")),
             "quantity": int(parsed.get("quantity", 1) or 1),
         }
-        logger.info("CartPlanner: JSON parseado action=%s qty=%s query=%r", plan["action"], plan["quantity"], plan["query"][:120])
+        logger.info(
+            "[worker:cart:plan] action=%s qty=%s query=%r",
+            plan["action"],
+            plan["quantity"],
+            plan["query"][:120],
+        )
         return plan
     heur = _heuristic_plan(user_message.lower())
     logger.warning(
-        "CartPlanner: fallback heurístico (JSON inválido o ausente) action=%s",
+        "[worker:cart:plan] heuristic_fallback action=%s",
         heur.get("action"),
     )
     return heur
@@ -198,7 +203,7 @@ def build_cart_manager_node(llm: BaseLLM) -> Callable[..., Any]:
         thread_id = state.get("thread_id") or ""
         user_message = _last_user_text(state.get("messages", []))
         logger.info(
-            "CartManager: thread_id=%s user_chars=%d",
+            "[worker:cart] thread=%s user_chars=%d",
             thread_id,
             len(user_message),
         )
@@ -224,7 +229,8 @@ def build_cart_manager_node(llm: BaseLLM) -> Callable[..., Any]:
 
         payload = await _store.merge_update(str(thread_id), mutator=mutator)
         logger.info(
-            "CartManager: carrito_actual lineas=%d total=%.2f fase=%s",
+            "[worker:cart] thread=%s lines=%d total=%.2f phase=%s",
+            thread_id,
             len(payload.cart),
             sum(ln.price * ln.quantity for ln in payload.cart),
             payload.order_phase,

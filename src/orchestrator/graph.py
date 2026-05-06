@@ -14,6 +14,11 @@ from src.orchestrator.workers.payment_checkout import build_payment_checkout_nod
 logger = logging.getLogger(__name__)
 
 
+def _clip(s: str, n: int = 280) -> str:
+    s = (s or "").strip().replace("\n", " ")
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
 def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
     workflow = StateGraph(state_schema=DeliveryState)
     cart_manager_node = build_cart_manager_node(llm)
@@ -33,26 +38,28 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
                 break
 
         logger.info(
-            "Router: thread_id=%s mensaje_usuario_chars=%d",
+            "[graph:router] thread=%s user_chars=%d user=%r",
             thread_id,
             len(last_message),
+            _clip(last_message, 200),
         )
-        logger.debug("Router: extracto mensaje=%r", last_message[:500] if last_message else "")
 
         prompt = build_router_prompt(user_message=last_message)
         caps = llm.get_capabilities()
         logger.debug(
-            "Router: invocando LLM proveedor=%s modelo=%s",
+            "[graph:router] llm provider=%s model=%s",
             caps.get("provider"),
             caps.get("model"),
         )
         response = await llm.ainvoke([{"role": "user", "content": prompt}])
         raw = (response.text or "").upper()
-        logger.info("Router: respuesta cruda del modelo (trunc): %.200s", raw.strip())
+        logger.info("[graph:router] raw_reply=%r", _clip(raw, 200))
+
+        prev_intent = state.get("intent")
 
         intent = "GENERAL"
-        if "UNKNOWN" in raw:
-            intent = "UNKNOWN"
+        if "FALLBACK" in raw or "UNKNOWN" in raw:
+            intent = "FALLBACK"
         elif "CART" in raw:
             intent = "CART"
         elif "MENU" in raw:
@@ -62,16 +69,26 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
         elif "PAYMENT" in raw:
             intent = "PAYMENT"
 
-        logger.info("Router: intención resuelta=%s", intent)
+        changed = intent != prev_intent
+        logger.info(
+            "[graph:intent] thread=%s detected=%s previous=%s changed=%s",
+            thread_id,
+            intent,
+            prev_intent,
+            changed,
+        )
         return {"intent": intent}
 
     def route_intent(state: DeliveryState) -> str:
         return state.get("intent", "GENERAL")
 
     async def decline_node(state: DeliveryState) -> dict:
-        logger.info("Decline: respuesta fija por intención UNKNOWN u no soportada")
+        logger.info(
+            "[graph:decline] thread=%s intent=FALLBACK",
+            state.get("thread_id", ""),
+        )
         text = (
-            "No puedo ayudarte con eso. Soy el asistente de FEAST Burgers: "
+            "No puedo ayudarte con eso. Soy el asistente de FEAST para pedidos de comida: "
             "puedo mostrarte el menú, armar tu carrito (agregar o quitar productos) "
             "y resolver dudas del restaurante."
         )
@@ -92,13 +109,13 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
         if state.get("menu_digest"):
             grounding_parts.append(state["menu_digest"])
             logger.debug(
-                "LLM nodo: menu_digest presente (%d chars)",
+                "[graph:llm] menu_digest chars=%d",
                 len(state["menu_digest"]),
             )
         if state.get("cart_digest"):
             grounding_parts.append(state["cart_digest"])
             logger.debug(
-                "LLM nodo: cart_digest presente (%d chars)",
+                "[graph:llm] cart_digest chars=%d",
                 len(state["cart_digest"]),
             )
         if state.get("order_phase"):
@@ -113,34 +130,34 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
                 {
                     "role": "user",
                     "content": (
-                        "[Contexto operativo FEAST — no es el cliente; "
+                        "[Contexto operativo FEAST (menú / carrito / pedido) — no es el mensaje del cliente; "
                         "úsalo solo para fundamentar tu respuesta al historial real.]\n\n"
                         + block
                     ),
                 }
             ] + invoke_messages
             logger.info(
-                "LLM nodo: thread_id=%s intent_previo=%s mensajes_historial=%d contexto_inyectado=True",
+                "[graph:llm] thread=%s intent=%s hist_msgs=%d context=yes",
                 thread_id,
                 intent,
                 len(messages),
             )
         else:
             logger.info(
-                "LLM nodo: thread_id=%s intent_previo=%s mensajes_historial=%d contexto_inyectado=False",
+                "[graph:llm] thread=%s intent=%s hist_msgs=%d context=no",
                 thread_id,
                 intent,
                 len(messages),
             )
 
         caps = llm.get_capabilities()
-        logger.debug("LLM nodo: capacidades=%s", caps)
+        logger.debug("[graph:llm] caps=%s", caps)
         response = await llm.ainvoke(invoke_messages)
-        out_preview = (response.text or "")[:300]
         logger.info(
-            "LLM nodo: respuesta generada chars=%d preview=%r",
+            "[graph:llm] thread=%s assistant_chars=%d assistant=%r",
+            thread_id,
             len(response.text or ""),
-            out_preview,
+            _clip(response.text or "", 320),
         )
         now = datetime.now(timezone.utc)
 
@@ -172,7 +189,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             "GENERAL": "llm",
             "PAYMENT": "llm",
             "CHECKOUT": "payment_checkout",
-            "UNKNOWN": "decline",
+            "FALLBACK": "decline",
         },
     )
 
@@ -181,9 +198,8 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
     workflow.add_edge("payment_checkout", END)
     workflow.add_edge("llm", END)
     workflow.add_edge("decline", END)
-
     if checkpointer:
-        logger.info("Grafo LangGraph compilado con checkpointer Redis")
+        logger.info("[graph] compile checkpointer=redis")
         return workflow.compile(checkpointer=checkpointer)
-    logger.info("Grafo LangGraph compilado sin checkpointer")
+    logger.info("[graph] compile checkpointer=none")
     return workflow.compile()

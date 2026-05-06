@@ -37,7 +37,7 @@ def build_payment_checkout_node() -> Callable[..., Any]:
                 "El cobro con tarjeta no está activo en este entorno (falta configurar Stripe). "
                 "Puedes seguir armando tu pedido por aquí; un administrador debe definir STRIPE_SECRET_KEY."
             )
-            logger.warning("Checkout Stripe omitido: STRIPE_SECRET_KEY vacía")
+            logger.warning("[worker:checkout] skipped stripe_key empty thread=%s", thread_id)
             return {
                 "messages": [{"role": "assistant", "content": text}],
                 "updated_at": now,
@@ -53,7 +53,7 @@ def build_payment_checkout_node() -> Callable[..., Any]:
 
             url = await asyncio.to_thread(_run)
         except Exception as e:
-            logger.error("Stripe Checkout falló: %s", e, exc_info=True)
+            logger.error("[worker:checkout] stripe error thread=%s: %s", thread_id, e, exc_info=True)
             text = (
                 "No pude generar el enlace de pago en este momento. "
                 "Revisa la configuración de Stripe y las URLs de éxito/cancelación, o inténtalo más tarde."
@@ -74,9 +74,10 @@ def build_payment_checkout_node() -> Callable[..., Any]:
                 "cart_digest": None,
             }
 
-        async def mutator(p):
+        def mutator(p):
             p.order_phase = "awaiting_payment"
             p.flags["stripe_checkout_url"] = url
+            p.flags["payment_pending"] = True
 
         await _store.merge_update(thread_id, mutator=mutator)
 
@@ -86,7 +87,7 @@ def build_payment_checkout_node() -> Callable[..., Any]:
             f"Abre este enlace para pagar con tarjeta (Stripe Checkout):\n{url}\n\n"
             "Cuando termines, vuelve al chat si necesitas algo más."
         )
-        logger.info("Checkout Stripe creado thread_id=%s", thread_id)
+        logger.info("[worker:checkout] session_ok thread=%s lines=%d", thread_id, len(lines))
         return {
             "messages": [{"role": "assistant", "content": text}],
             "updated_at": now,
