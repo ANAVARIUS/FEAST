@@ -33,6 +33,24 @@ def _format_menu_digest(items: List[Any]) -> str:
     return "\n".join(lines)
 
 
+def _build_menu_prompt_block() -> str:
+    """Construye el bloque final de menu para inyectarlo al LLM."""
+    items = MenuRepository.get_full_catalog()
+    digest = _format_menu_digest(items)
+    instructions = build_menu_specialist_instructions()
+    return f"{instructions}\n\n{digest}"
+
+
+class _MenuToolCompat:
+    """Compat para pruebas legacy que parchean `get_menu.invoke(...)`."""
+
+    def invoke(self, *_args: Any, **_kwargs: Any) -> str:
+        return _build_menu_prompt_block()
+
+
+get_menu = _MenuToolCompat()
+
+
 async def menu_specialist_node(state: DeliveryState) -> Dict[str, Any]:
     """
     Carga el catálogo desde BD y expone un `menu_digest` efímero para el nodo LLM.
@@ -41,12 +59,7 @@ async def menu_specialist_node(state: DeliveryState) -> Dict[str, Any]:
     thread_id = state.get("thread_id", "")
     logger.info("[worker:menu] thread=%s load_catalog", thread_id)
 
-    items = await asyncio.to_thread(MenuRepository.get_full_catalog)
-    logger.info("[worker:menu] thread=%s items=%d", thread_id, len(items))
-
-    digest = _format_menu_digest(items)
-    instructions = build_menu_specialist_instructions()
-    prompt_block = f"{instructions}\n\n{digest}"
+    prompt_block = await asyncio.to_thread(get_menu.invoke, {})
     logger.debug("[worker:menu] digest_chars=%d", len(prompt_block))
 
     now = datetime.now(timezone.utc)

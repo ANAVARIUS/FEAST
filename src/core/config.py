@@ -6,10 +6,14 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Config(BaseSettings):
-    """Configuración centralizada de la aplicación."""
+    """Configuracion centralizada de la aplicacion."""
 
     # Telegram
     telegram_token: str = Field(..., validation_alias="PAPI_BOT_KEY")
+
+    # Database
+    url_conexion: str = Field("", validation_alias="URL_CONEXION")
+    url_connection: str = Field("", validation_alias="URL_CONNECTION")
 
     # Uvicorn
     port: int = Field(8000, validation_alias="PORT")
@@ -66,8 +70,7 @@ class Config(BaseSettings):
         auth = f":{self.redis_password}@" if self.redis_password else ""
         return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
-
-
+config = Config()
 
 # Instancia global para usar en toda la aplicación
 config = Config()

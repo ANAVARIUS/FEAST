@@ -31,9 +31,16 @@ classmethod-decorators = ["classmethod"]
 [tool.ruff.lint.per-file-ignores]
 # Ignorar chequeo de tipos en tests si es muy restrictivo
 "tests/*" = ["ANN"]
+"pruebas/*" = ["ANN", "D"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["pruebas"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.pyright]
 # Configuración complementaria para tipado estricto (opcional)
