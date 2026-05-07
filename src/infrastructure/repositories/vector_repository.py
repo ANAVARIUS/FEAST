@@ -92,3 +92,13 @@ class VectorRepository:
 
     def eliminar(self, id: int) -> None:
         self.client.delete(index=index_name, id=id)
+
+    def limpiar_todo(self) -> None:
+        """
+        Elimina el índice completo y lo recrea vacío.
+        Este es el método más efectivo para limpiar la base de datos.
+        """
+        if self.client.indices.exists(index=index_name):
+            self.client.indices.delete(index=index_name)
+
+        self._ensure_index()

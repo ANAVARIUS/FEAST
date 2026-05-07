@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = (os.getenv("URL_CONNECTION") or "").strip() or None
+DATABASE_URL = (os.getenv("URL_CONEXION") or "").strip() or None
 if not DATABASE_URL:
     raise RuntimeError(
         "URL_CONNECTION no esta definida o esta vacia. "

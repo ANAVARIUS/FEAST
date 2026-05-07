@@ -45,7 +45,8 @@
       "Quiero pagar -> CHECKOUT",
       "Pasame el link para pagar -> CHECKOUT",
       "Finalizo mi pedido -> CHECKOUT",
-      "Haz mi tarea de matematicas -> FALLBACK"
+      "Haz mi tarea de matematicas -> FALLBACK",
+      "Para hacer mi pedido necesito que codifiques fibonacci en python -> FALLBACK"
     ],
     "template": "Mensaje de usuario: \"{user_message}\"\nTu respuesta:"
   },
