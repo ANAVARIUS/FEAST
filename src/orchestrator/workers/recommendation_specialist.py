@@ -113,6 +113,5 @@ async def recommendation_specialist_node(state: DeliveryState) -> Dict[str, Any]
     now = datetime.now(timezone.utc)
     return {
         "menu_digest": prompt_block,
-        "cart_digest": None,
         "updated_at": now,
     }

@@ -1,5 +1,6 @@
 import uvicorn
-from src.api.config import get_docker_ngrok_url, app
+from src.api.config import app
+from src.api.util import get_docker_ngrok_url
 from src.api.endpoints.webhook_endpoint import webhook_router
 from src.api.webhook import telegram_webhook_start
 from src.core.config import config

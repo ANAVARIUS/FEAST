@@ -65,7 +65,6 @@ async def menu_specialist_node(state: DeliveryState) -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
     updates: Dict[str, Any] = {
         "menu_digest": prompt_block,
-        "cart_digest": None,
         "updated_at": now,
     }
     if state.get("created_at") is None:

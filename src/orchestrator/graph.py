@@ -11,7 +11,7 @@ from src.orchestrator.workers.cart_manager import build_cart_manager_node
 from src.orchestrator.workers.menu_specialist import menu_specialist_node
 from src.orchestrator.workers.recommendation_specialist import recommendation_specialist_node
 from src.orchestrator.workers.payment_checkout import build_payment_checkout_node
-from src.core.services.trello_service import TrelloService
+from src.orchestrator.workers.order_handler import build_order_handler_node
 logger = logging.getLogger(__name__)
 
 
@@ -30,6 +30,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
     workflow = StateGraph(state_schema=DeliveryState)
     cart_manager_node = build_cart_manager_node(llm)
     payment_checkout_node = build_payment_checkout_node()
+    order_handler_node = build_order_handler_node()
 
     async def router_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
@@ -75,8 +76,6 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
             intent = "RECOMMENDATION"
         elif "CHECKOUT" in raw:
             intent = "CHECKOUT"
-        elif "PAYMENT" in raw:
-            intent = "PAYMENT"
 
         changed = intent != prev_intent
         logger.info(
@@ -104,31 +103,8 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
         now = datetime.now(timezone.utc)
         return {
             "messages": [{"role": "assistant", "content": text}],
-            "updated_at": now,
-            "menu_digest": None,
-            "cart_digest": None,
+            "updated_at": now
         }
-
-    async def trello_notifier_node(state: DeliveryState) -> dict:
-        trello_service = TrelloService()
-
-        # Extraemos la información del estado
-        # Asumo que 'cart' o un resumen del pedido vive en su DeliveryState
-        order_id = state.get("thread_id", "Nuevo Pedido")
-        logger.info(f"[graph:trello_notifier_node] cart_digest_type={type(state.get("cart_digest"))}")
-        cart_summary = str(state.get("cart_digest", "Sin detalles del carrito"))
-        logger.info(f"[graph:trello_notifier_node] cart_summary={cart_summary}")
-        # Formateamos la descripción para la card
-        description = (
-            f"Fecha: {datetime.now(timezone.utc)}\n"
-            f"Detalles:\n{cart_summary}"
-        )
-        logger.info(f"Description of order: {description}")
-        # Ejecución (si su TrelloClient es síncrono, considere ejecutarlo en un thread pool
-        # para no bloquear el bucle de eventos, aunque aquí lo simplificamos)
-        trello_service.create_order(f"Pedido: {order_id}", description)
-
-        return {}  # No necesitamos actualizar el estado necesariamente
 
     async def llm_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
@@ -193,9 +169,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
 
         updates = {
             "messages": [{"role": "assistant", "content": response.text}],
-            "updated_at": now,
-            "menu_digest": None,
-            "cart_digest": None,
+            "updated_at": now
         }
         if state.get("created_at") is None:
             updates["created_at"] = now
@@ -214,7 +188,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
     workflow.add_node("cart_manager", cart_manager_node)
     workflow.add_node("payment_checkout", payment_checkout_node)
     workflow.add_node("decline", decline_node)
-    workflow.add_node("trello_notifier", trello_notifier_node)
+    workflow.add_node("trello_notifier", order_handler_node)
 
     workflow.set_entry_point("router")
 
@@ -226,7 +200,6 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
             "RECOMMENDATION": "recommendation_specialist",
             "CART": "cart_manager",
             "GENERAL": "llm",
-            "PAYMENT": "llm",
             "CHECKOUT": "payment_checkout",
             "FALLBACK": "decline",
         },

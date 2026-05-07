@@ -29,7 +29,6 @@ def build_payment_checkout_node() -> Callable[..., Any]:
                 "messages": [{"role": "assistant", "content": text}],
                 "updated_at": now,
                 "menu_digest": None,
-                "cart_digest": None,
             }
 
         if not (config.stripe_secret_key or "").strip():
@@ -42,7 +41,6 @@ def build_payment_checkout_node() -> Callable[..., Any]:
                 "messages": [{"role": "assistant", "content": text}],
                 "updated_at": now,
                 "menu_digest": None,
-                "cart_digest": None,
             }
 
         try:
@@ -62,7 +60,6 @@ def build_payment_checkout_node() -> Callable[..., Any]:
                 "messages": [{"role": "assistant", "content": text}],
                 "updated_at": now,
                 "menu_digest": None,
-                "cart_digest": None,
             }
 
         if not url:
@@ -71,7 +68,6 @@ def build_payment_checkout_node() -> Callable[..., Any]:
                 "messages": [{"role": "assistant", "content": text}],
                 "updated_at": now,
                 "menu_digest": None,
-                "cart_digest": None,
             }
 
         def mutator(p):
@@ -92,8 +88,8 @@ def build_payment_checkout_node() -> Callable[..., Any]:
             "messages": [{"role": "assistant", "content": text}],
             "updated_at": now,
             "menu_digest": None,
-            "cart_digest": None,
             "order_phase": "awaiting_payment",
+            "cart": [ln.model_dump() for ln in lines]
         }
 
     return payment_checkout_node

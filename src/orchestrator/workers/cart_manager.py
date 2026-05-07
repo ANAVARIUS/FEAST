@@ -16,7 +16,6 @@ from src.orchestrator.state import DeliveryState
 logger = logging.getLogger(__name__)
 _store = ConversationSessionStore()
 
-
 def _last_user_text(messages: List[Any]) -> str:
     for msg in reversed(messages or []):
         if isinstance(msg, dict) and msg.get("role") == "user":
@@ -105,7 +104,7 @@ async def _plan_with_llm(llm: BaseLLM, user_message: str) -> List[Dict[str, Any]
     caps = llm.get_capabilities()
 
     resp = await llm.ainvoke([{"role": "user", "content": prompt}])
-    logger.info("[worker:cart:plan] plan=%d", str(resp.text or ""))
+    logger.info("[worker:cart:plan] plan=%s", str(resp.text or ""))
 
     parsed = _extract_json_object(resp.text)
 

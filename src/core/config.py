@@ -4,6 +4,7 @@ from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from src.api.util import get_docker_ngrok_url
 
 class Config(BaseSettings):
     """Configuracion centralizada de la aplicacion."""
@@ -46,7 +47,7 @@ class Config(BaseSettings):
     # Stripe (checkout al finalizar pedido; opcional hasta configurar STRIPE_SECRET_KEY)
     stripe_secret_key: Optional[str] = Field(None, validation_alias="STRIPE_SECRET_KEY")
     stripe_currency: str = Field("mxn", validation_alias="STRIPE_CURRENCY")
-    public_base_url: Optional[str] = Field(None, validation_alias="PUBLIC_BASE_URL")
+    public_base_url: Optional[str] = get_docker_ngrok_url() or ""
     stripe_success_url: Optional[str] = Field(None, validation_alias="STRIPE_SUCCESS_URL")
     stripe_cancel_url: Optional[str] = Field(None, validation_alias="STRIPE_CANCEL_URL")
     stripe_webhook_secret: Optional[str] = Field(None, validation_alias="STRIPE_WEBHOOK_SECRET")
