@@ -116,15 +116,15 @@ def seed_database():
         # -------- VECTOR DB --------
         vector_repo = VectorRepository()
         platillos_vectoriales = [
-            (todos_los_productos[0].ItemID,  "Pizza Pepperoni",                "Pizza clásica con pepperoni premium y extra queso"),
-            (todos_los_productos[1].ItemID,  "Pizza Hawaiana Galáctica",       "Pizza con piña asada y jamón"),
+            (todos_los_productos[0].ItemID,  "Pizza Pepperoni",                "Pizza clásica con pepperoni premium y extra queso mozarella"),
+            (todos_los_productos[1].ItemID,  "Pizza Hawaiana Galáctica",       "Pizza con piña asada y jamón de cerdo"),
             (todos_los_productos[2].ItemID,  "Pizza Vegetariana",              "Pizza con champiñones frescos y verduras"),
-            (todos_los_productos[3].ItemID,  "Pizza de Carnes Frías",          "Pizza con variedad de carnes frías"),
-            (todos_los_productos[4].ItemID,  "Palitroques de Ajo",             "Palitroques crujientes con mantequilla de ajo"),
+            (todos_los_productos[3].ItemID,  "Pizza de Carnes Frías",          "Pizza con variedad de carnes frías con jamon, pepperoni, tocino y jamon serrano"),
+            (todos_los_productos[4].ItemID,  "Palitroques de Ajo",             "Palitos de pan recien horneados, crujientes con mantequilla de ajo"),
             (todos_los_productos[5].ItemID,  "Alitas BBQ (10 pzas)",           "Alitas de pollo bañadas en salsa BBQ"),
-            (todos_los_productos[6].ItemID,  "Coca Cola 600ml",                "Refresco de cola 600ml bien frío"),
-            (todos_los_productos[7].ItemID,  "Agua Mineral 500ml",             "Agua mineral natural 500ml"),
-            (todos_los_productos[8].ItemID,  "Té Frío de Limón",               "Té helado con limón natural"),
+            (todos_los_productos[6].ItemID,  "Coca Cola 600ml",                "Refresco de cola mezclado con agua con gas de 600ml bien frío"),
+            (todos_los_productos[7].ItemID,  "Agua Mineral 500ml",             "Agua con gas mineral natural 500ml"),
+            (todos_los_productos[8].ItemID,  "Té Frío de Limón",               "Té helado fuistie con extracto de limón natural"),
             (todos_los_productos[9].ItemID,  "Cerveza Artesanal 'Andrómeda'",  "Cerveza artesanal estilo lager con notas cítricas"),
         ]
 
