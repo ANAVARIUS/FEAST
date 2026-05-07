@@ -112,14 +112,15 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
         # Extraemos la información del estado
         # Asumo que 'cart' o un resumen del pedido vive en su DeliveryState
         order_id = state.get("thread_id", "Nuevo Pedido")
+        logger.info(f"[graph:trello_notifier_node] cart_digest_type={type(state.get("cart_digest"))}")
         cart_summary = str(state.get("cart_digest", "Sin detalles del carrito"))
-
+        logger.info(f"[graph:trello_notifier_node] cart_summary={cart_summary}")
         # Formateamos la descripción para la card
         description = (
             f"Fecha: {datetime.now(timezone.utc)}\n"
             f"Detalles:\n{cart_summary}"
         )
-
+        logger.info(f"Description of order: {description}")
         # Ejecución (si su TrelloClient es síncrono, considere ejecutarlo en un thread pool
         # para no bloquear el bucle de eventos, aunque aquí lo simplificamos)
         trello_service.create_order(f"Pedido: {order_id}", description)
