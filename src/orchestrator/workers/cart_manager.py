@@ -95,7 +95,7 @@ def _sync_catalog_names() -> str:
     return "\n".join(lines)
 
 
-async def _plan_with_llm(llm: BaseLLM, user_message: str) -> Dict[str, Any]:
+async def _plan_with_llm(llm: BaseLLM, user_message: str) -> List[Dict[str, Any]]:
     catalog = await asyncio.to_thread(_sync_catalog_names)
     prompt = build_cart_planner_prompt(
         user_message=user_message,
@@ -103,99 +103,123 @@ async def _plan_with_llm(llm: BaseLLM, user_message: str) -> Dict[str, Any]:
     )
     logger.debug("[worker:cart:plan] prompt_chars=%d", len(prompt))
     caps = llm.get_capabilities()
-    logger.info(
-        "[worker:cart:plan] llm provider=%s model=%s",
-        caps.get("provider"),
-        caps.get("model"),
-    )
+
     resp = await llm.ainvoke([{"role": "user", "content": prompt}])
-    logger.info("[worker:cart:plan] reply_chars=%d", len(resp.text or ""))
+    logger.info("[worker:cart:plan] plan=%d", str(resp.text or ""))
+
     parsed = _extract_json_object(resp.text)
-    if parsed and isinstance(parsed, dict) and "action" in parsed:
-        plan = {
-            "action": str(parsed.get("action", "view")).lower(),
-            "query": str(parsed.get("query", "")),
-            "quantity": int(parsed.get("quantity", 1) or 1),
-        }
-        logger.info(
-            "[worker:cart:plan] action=%s qty=%s query=%r",
-            plan["action"],
-            plan["quantity"],
-            plan["query"][:120],
-        )
-        return plan
+
+    # Extraemos la lista de operaciones
+    if parsed and isinstance(parsed, dict) and "operations" in parsed:
+        plans = []
+        for op in parsed.get("operations", []):
+            plan = {
+                "action": str(op.get("action", "view")).lower(),
+                "query": str(op.get("query", "")),
+                "quantity": int(op.get("quantity", 1) or 1),
+            }
+            logger.info(
+                "[worker:cart:plan] action=%s qty=%s query=%r",
+                plan["action"],
+                plan["quantity"],
+                plan["query"][:120],
+            )
+            plans.append(plan)
+
+        if plans:
+            return plans
+
+    # Fallback si falla la estructura
     heur = _heuristic_plan(user_message.lower())
-    logger.warning(
-        "[worker:cart:plan] heuristic_fallback action=%s",
-        heur.get("action"),
-    )
-    return heur
+    logger.warning("[worker:cart:plan] heuristic_fallback action=%s", heur.get("action"))
+    return [heur]  # Lo devolvemos como lista para mantener la consistencia
 
 
 def _mutate_cart(
-    lines: List[CartLine],
-    action: str,
-    query: str,
-    quantity: int,
+        lines: List[CartLine],
+        operations: List[Dict[str, Any]],
 ) -> tuple[List[CartLine], str]:
-    qty = max(1, quantity)
-    note = ""
+    # Creamos una copia del estado actual del carrito
+    new_lines = [ln.model_copy(deep=True) for ln in lines]
+    notes = []
 
-    if action == "view":
-        return lines, "Solo consulta de carrito."
+    for op in operations:
+        action = op.get("action", "view")
+        query = op.get("query", "")
+        qty = max(1, op.get("quantity", 1))
 
-    if action == "clear":
-        return [], "Carrito vaciado."
+        if action == "view":
+            if not notes:  # Evita saturar si hay múltiples operaciones
+                notes.append("Consulta de carrito.")
+            continue
 
-    matches = MenuRepository.find_items_by_query(query, limit=5) if query else []
+        if action == "clear":
+            new_lines = []
+            notes.append("Carrito vaciado.")
+            continue
 
-    if action == "add":
-        if not matches:
-            return lines, "No se encontró un producto en el catálogo con esa descripción."
-        item = matches[0]
-        if len(matches) > 1:
-            note = f"Varias coincidencias; se usó: {item.Name}. Otras: {', '.join(m.Name for m in matches[1:3])}."
-        new_lines = [ln.model_copy(deep=True) for ln in lines]
-        found = False
-        for ln in new_lines:
-            if ln.item_id == str(item.ItemID):
-                ln.quantity += qty
-                found = True
-                break
-        if not found:
-            new_lines.append(
-                CartLine(
-                    item_id=str(item.ItemID),
-                    name=item.Name,
-                    price=float(item.Price),
-                    quantity=qty,
-                )
-            )
-        return new_lines, note or "Producto agregado al carrito."
+        matches = MenuRepository.find_items_by_query(query, limit=5) if query else []
 
-    if action == "remove":
-        if not query.strip():
-            return lines, "Indica qué producto quitar del carrito."
-        new_lines = [ln.model_copy(deep=True) for ln in lines]
-        if not new_lines:
-            return new_lines, "El carrito ya estaba vacío."
-        qlow = query.lower()
-        removed = False
-        out: List[CartLine] = []
-        for ln in new_lines:
-            if removed or not (qlow in ln.name.lower() or ln.name.lower() in qlow):
-                out.append(ln)
+        if action == "add":
+            if not matches:
+                notes.append(f"No se encontró: '{query}'.")
                 continue
-            removed = True
-            remaining = ln.quantity - qty
-            if remaining > 0:
-                ln.quantity = remaining
-                out.append(ln)
-        if not removed:
-            return lines, "No hay ese producto en el carrito (revisa el nombre)."
-        return out, "Producto actualizado en el carrito."
 
-    return lines, "Acción de carrito no reconocida; pide aclaración al usuario."
+            item = matches[0]
+            if len(matches) > 1:
+                # Opcional: Podrías hacer logging aquí en lugar de mostrárselo al usuario
+                pass
+
+            found = False
+            for ln in new_lines:
+                if ln.item_id == str(item.ItemID):
+                    ln.quantity += qty
+                    found = True
+                    break
+            if not found:
+                new_lines.append(
+                    CartLine(
+                        item_id=str(item.ItemID),
+                        name=item.Name,
+                        price=float(item.Price),
+                        quantity=qty,
+                    )
+                )
+            notes.append(f"Agregado: {qty}x {item.Name}.")
+
+        elif action == "remove":
+            if not query.strip():
+                notes.append("Indica qué producto quitar.")
+                continue
+
+            if not new_lines:
+                notes.append("El carrito ya estaba vacío.")
+                continue
+
+            qlow = query.lower()
+            removed = False
+            out: List[CartLine] = []
+
+            for ln in new_lines:
+                if removed or not (qlow in ln.name.lower() or ln.name.lower() in qlow):
+                    out.append(ln)
+                    continue
+
+                removed = True
+                remaining = ln.quantity - qty
+                if remaining > 0:
+                    ln.quantity = remaining
+                    out.append(ln)
+
+            if not removed:
+                notes.append(f"No hay '{query}' en el carrito.")
+            else:
+                notes.append(f"Removido: {qty}x {query}.")
+
+            new_lines = out
+
+    final_note = " | ".join(notes) if notes else "Acción de carrito procesada."
+    return new_lines, final_note
 
 
 def build_cart_manager_node(llm: BaseLLM) -> Callable[..., Any]:
@@ -208,30 +232,28 @@ def build_cart_manager_node(llm: BaseLLM) -> Callable[..., Any]:
             len(user_message),
         )
 
-        plan = await _plan_with_llm(llm, user_message)
-        if plan["quantity"] < 1:
-            plan["quantity"] = 1
+        operations = await _plan_with_llm(llm, user_message)
 
         def mutator(payload):
             new_lines, op_note = _mutate_cart(
                 list(payload.cart),
-                plan["action"],
-                plan["query"],
-                plan["quantity"],
+                operations
             )
             payload.cart = new_lines
+            has_mutations = any(op.get("action") in ("add", "remove") for op in operations)
             if not new_lines:
                 payload.order_phase = "idle"
-            elif plan["action"] in ("add", "remove") and new_lines:
+            elif has_mutations and new_lines:
                 payload.order_phase = "cart_building"
+
             if op_note:
                 payload.flags["last_cart_op"] = op_note
 
         payload = await _store.merge_update(str(thread_id), mutator=mutator)
         logger.info(
-            "[worker:cart] thread=%s lines=%d total=%.2f phase=%s",
+            "[worker:cart] thread=%s cart=%s total=%.2f phase=%s",
             thread_id,
-            len(payload.cart),
+            str(payload.cart),
             sum(ln.price * ln.quantity for ln in payload.cart),
             payload.order_phase,
         )
