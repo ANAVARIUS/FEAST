@@ -11,9 +11,9 @@ class TrelloService:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._client = TrelloClient(
-            api_key='TU_API_KEY',
-            token='TU_TOKEN'
-        )
+                api_key=os.getenv("TRELLO_API_KEY"),
+                token=os.getenv("TRELLO_TOKEN"),
+            )
             cls._instance._board = cls._instance._client.get_board(os.getenv('TRELLO_BOARD_ID'))
             cls._instance._target_list = cls._instance._board.get_list(os.getenv('TRELLO_LIST_ID'))
         return cls._instance

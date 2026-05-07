@@ -10,7 +10,7 @@ from src.orchestrator.state import DeliveryState
 from src.orchestrator.workers.cart_manager import build_cart_manager_node
 from src.orchestrator.workers.menu_specialist import menu_specialist_node
 from src.orchestrator.workers.payment_checkout import build_payment_checkout_node
-
+from src.core.services.trello_service import TrelloService
 logger = logging.getLogger(__name__)
 
 
@@ -100,6 +100,26 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             "cart_digest": None,
         }
 
+    async def trello_notifier_node(state: DeliveryState) -> dict:
+        trello_service = TrelloService()
+
+        # Extraemos la información del estado
+        # Asumo que 'cart' o un resumen del pedido vive en su DeliveryState
+        order_id = state.get("thread_id", "Nuevo Pedido")
+        cart_summary = str(state.get("cart_digest", "Sin detalles del carrito"))
+
+        # Formateamos la descripción para la card
+        description = (
+            f"Fecha: {datetime.now(timezone.utc)}\n"
+            f"Detalles:\n{cart_summary}"
+        )
+
+        # Ejecución (si su TrelloClient es síncrono, considere ejecutarlo en un thread pool
+        # para no bloquear el bucle de eventos, aunque aquí lo simplificamos)
+        trello_service.create_order(f"Pedido: {order_id}", description)
+
+        return {}  # No necesitamos actualizar el estado necesariamente
+
     async def llm_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
         thread_id = state.get("thread_id", "")
@@ -171,12 +191,19 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             updates["created_at"] = now
         return updates
 
+    def should_notify_trello(state: DeliveryState) -> str:
+        # Verificamos si el estado del pedido avanzó correctamente
+        if state.get("order_phase") == "awaiting_payment":
+            return "trello_notifier"
+        return "END"
+
     workflow.add_node("router", router_node)
     workflow.add_node("llm", llm_node)
     workflow.add_node("menu_specialist", menu_specialist_node)
     workflow.add_node("cart_manager", cart_manager_node)
     workflow.add_node("payment_checkout", payment_checkout_node)
     workflow.add_node("decline", decline_node)
+    workflow.add_node("trello_notifier", trello_notifier_node)
 
     workflow.set_entry_point("router")
 
@@ -192,10 +219,17 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             "FALLBACK": "decline",
         },
     )
-
+    workflow.add_conditional_edges(
+        "payment_checkout",
+        should_notify_trello,
+        {
+            "trello_notifier": "trello_notifier",
+            "END": END
+        }
+    )
     workflow.add_edge("menu_specialist", "llm")
     workflow.add_edge("cart_manager", "llm")
-    workflow.add_edge("payment_checkout", END)
+    workflow.add_edge("trello_notifier", END)
     workflow.add_edge("llm", END)
     workflow.add_edge("decline", END)
     if checkpointer:

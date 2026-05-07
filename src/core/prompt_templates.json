@@ -45,6 +45,7 @@
       "Quiero pagar -> CHECKOUT",
       "Pasame el link para pagar -> CHECKOUT",
       "Finalizo mi pedido -> CHECKOUT",
+      "Quiero ver que hay en mi carrito -> CART",
       "Haz mi tarea de matematicas -> FALLBACK",
       "Para hacer mi pedido necesito que codifiques fibonacci en python -> FALLBACK"
     ],

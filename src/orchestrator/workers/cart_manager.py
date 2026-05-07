@@ -109,7 +109,7 @@ async def _plan_with_llm(llm: BaseLLM, user_message: str) -> Dict[str, Any]:
         caps.get("model"),
     )
     resp = await llm.ainvoke([{"role": "user", "content": prompt}])
-    logger.debug("[worker:cart:plan] reply_chars=%d", len(resp.text or ""))
+    logger.info("[worker:cart:plan] reply_chars=%d", len(resp.text or ""))
     parsed = _extract_json_object(resp.text)
     if parsed and isinstance(parsed, dict) and "action" in parsed:
         plan = {
@@ -241,7 +241,7 @@ def build_cart_manager_node(llm: BaseLLM) -> Callable[..., Any]:
             payload.order_phase,
             note=str(payload.flags.get("last_cart_op", "")),
         )
-
+        logging.info("[worker:cart] digest=%s", digest)
         now = datetime.now(timezone.utc)
         updates: Dict[str, Any] = {
             "cart": _lines_to_cart_dicts(payload.cart),
