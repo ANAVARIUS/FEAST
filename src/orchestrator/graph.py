@@ -9,6 +9,7 @@ from src.core.prompt_loader import build_router_prompt
 from src.orchestrator.state import DeliveryState
 from src.orchestrator.workers.cart_manager import build_cart_manager_node
 from src.orchestrator.workers.menu_specialist import menu_specialist_node
+from src.orchestrator.workers.recommendation_specialist import recommendation_specialist_node
 from src.orchestrator.workers.payment_checkout import build_payment_checkout_node
 from src.core.services.trello_service import TrelloService
 logger = logging.getLogger(__name__)
@@ -70,6 +71,8 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
             intent = "CART"
         elif "MENU" in raw:
             intent = "MENU"
+        elif "RECOMMENDATION" in raw:
+            intent = "RECOMMENDATION"
         elif "CHECKOUT" in raw:
             intent = "CHECKOUT"
         elif "PAYMENT" in raw:
@@ -207,6 +210,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
     workflow.add_node("router", router_node)
     workflow.add_node("llm", llm_node)
     workflow.add_node("menu_specialist", menu_specialist_node)
+    workflow.add_node("recommendation_specialist", recommendation_specialist_node)
     workflow.add_node("cart_manager", cart_manager_node)
     workflow.add_node("payment_checkout", payment_checkout_node)
     workflow.add_node("decline", decline_node)
@@ -219,6 +223,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
         route_intent,
         {
             "MENU": "menu_specialist",
+            "RECOMMENDATION": "recommendation_specialist",
             "CART": "cart_manager",
             "GENERAL": "llm",
             "PAYMENT": "llm",
@@ -235,6 +240,7 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
         }
     )
     workflow.add_edge("menu_specialist", "llm")
+    workflow.add_edge("recommendation_specialist", "llm")
     workflow.add_edge("cart_manager", "llm")
     workflow.add_edge("trello_notifier", END)
     workflow.add_edge("llm", END)

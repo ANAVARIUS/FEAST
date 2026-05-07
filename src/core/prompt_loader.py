@@ -44,6 +44,16 @@ def build_menu_specialist_instructions() -> str:
     return "\n\n".join(p for p in parts if p).strip()
 
 
+def build_recommendation_specialist_instructions() -> str:
+    """Bloque de instrucciones para el especialista de recomendaciones."""
+    t = _templates()["recommendation_specialist"]
+    parts: List[str] = [str(t.get("persona", "")).strip()]
+    parts.append(_bullets("Tono:", list(t.get("tone") or [])))
+    parts.append(_bullets("Reglas:", list(t.get("rules") or [])))
+    parts.append(_bullets("Formato:", list(t.get("format") or [])))
+    return "\n\n".join(p for p in parts if p).strip()
+
+
 def build_router_prompt(user_message: str) -> str:
     t = _templates()["router"]
     labels = ", ".join(t.get("allowed_labels") or [])
