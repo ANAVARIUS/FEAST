@@ -19,7 +19,13 @@ def _clip(s: str, n: int = 280) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph:
+
+def route_intent(state: DeliveryState) -> str:
+    """Enruta segun `intent` del estado (router -> nodo siguiente). Expuesto para pruebas (STD CP-UNIT-GRAPH-*)."""
+    return state.get("intent", "FALLBACK")
+
+
+def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> Any:
     workflow = StateGraph(state_schema=DeliveryState)
     cart_manager_node = build_cart_manager_node(llm)
     payment_checkout_node = build_payment_checkout_node()
@@ -79,9 +85,6 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
         )
         return {"intent": intent}
 
-    def route_intent(state: DeliveryState) -> str:
-        return state.get("intent", "GENERAL")
-
     async def decline_node(state: DeliveryState) -> dict:
         logger.info(
             "[graph:decline] thread=%s intent=FALLBACK",
@@ -99,7 +102,6 @@ def create_graph(llm: BaseLLM, checkpointer: Optional[Any] = None) -> StateGraph
             "menu_digest": None,
             "cart_digest": None,
         }
-
     async def llm_node(state: DeliveryState) -> dict:
         messages = state.get("messages", [])
         thread_id = state.get("thread_id", "")

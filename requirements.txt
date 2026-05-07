@@ -13,6 +13,8 @@ pyngrok==8.0.0
 SQLAlchemy==2.0.49
 uvicorn==0.44.0
 requests==2.32.5
+pytest==8.4.2
+pytest-asyncio==0.26.0
 stripe>=11.0.0,<12
 opensearch-py
 requests-aws4auth
