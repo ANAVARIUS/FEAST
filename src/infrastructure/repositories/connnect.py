@@ -1,6 +1,4 @@
-"""Motor SQLAlchemy y sesiones; exige `URL_CONEXION` en el entorno o en `.env` en la raiz del repo."""
-
-from __future__ import annotations
+"""Motor SQLAlchemy y sesiones; admite URL_CONEXION/URL_CONNECTION desde entorno o config."""
 
 import os
 from pathlib import Path
@@ -15,10 +13,16 @@ load_dotenv(_PROJECT_ROOT / ".env")
 
 from src.core.config import config
 
-_raw_url = (config.url_conexion or os.getenv("URL_CONEXION") or "").strip()
+_raw_url = (
+    config.url_conexion
+    or config.url_connection
+    or os.getenv("URL_CONEXION")
+    or os.getenv("URL_CONNECTION")
+    or ""
+).strip()
 if not _raw_url:
     msg = (
-        "Falta URL_CONEXION: agrega en tu `.env` en la raiz del proyecto una linea como "
+        "Falta URL_CONEXION/URL_CONNECTION: agrega en tu `.env` una linea como "
         "URL_CONEXION=mysql+pymysql://usuario:clave@host:3306/nombre_bd "
         "(o sqlite+pysqlite:///./local.db para pruebas locales)."
     )

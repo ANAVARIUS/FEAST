@@ -40,9 +40,13 @@ async def create_async_redis_checkpointer(
     Crea y retorna un AsyncRedisSaver listo para usar en LangGraph asíncrono.
     """
     from langgraph.checkpoint.redis.aio import AsyncRedisSaver
+
+    log = logging.getLogger(__name__)
     url = redis_url or get_redis_url()
-    # Crear el checkpointer asíncrono directamente con la URL
+    redacted = url.split("@")[-1] if "@" in url else url
+    log.info("[checkpoint:redis] connect %s", redacted)
     saver = AsyncRedisSaver(redis_url=url)
-    if do_setup and hasattr(saver, 'asetup'):
+    if do_setup and hasattr(saver, "asetup"):
         await saver.asetup()
+        log.debug("[checkpoint:redis] asetup ok")
     return saver

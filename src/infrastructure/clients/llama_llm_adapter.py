@@ -11,13 +11,14 @@ from botocore.exceptions import ClientError
 from src.core.config import config, Config
 from src.core.llm.base import BaseLLM, LLMResponse
 from src.core.llm.types import ChatMessage
+from src.core.prompt_loader import FEAST_BEDROCK_SYSTEM_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 
 class LlamaLLMAdapter(BaseLLM):
     """
     Adaptador concreto para el modelo Llama de Meta vía AWS Bedrock.
-    Implementado para ser consistente con GeminiLLM.
+    Implementa BaseLLM vía Bedrock Converse (mismo contrato que el adapter de Gemini).
     """
     def __init__(
         self,
@@ -77,19 +78,8 @@ class LlamaLLMAdapter(BaseLLM):
         return self._invoke_with_retries(messages)
 
     def _invoke_with_retries(self, messages: List[ChatMessage]) -> LLMResponse:
-        # 1. Definir las instrucciones de sistema en el formato Converse
-        system_instruction = (
-            "Eres un agente virtual de un restaurante encargado exclusivamente de recibir, "
-            "gestionar y confirmar pedidos de comida. Tu función es guiar al cliente de "
-            "forma clara y eficiente: mostrar el menú cuando sea necesario, resolver dudas "
-            "sobre platillos, ingredientes, precios, disponibilidad y tiempos de entrega, "
-            "tomar pedidos con precisión, y confirmar todos los detalles antes de finalizar. "
-            "Puedes usar un tono amable y cercano, con pocos emojis si encajan, "
-            "pero manteniendo profesionalismo. Si el usuario hace preguntas que no estén "
-            "directamente relacionadas con el menú, la comida o el proceso de pedido, debes "
-            "rechazar cortésmente responder y redirigir la conversación al objetivo del pedido."
-        )
-        system_prompts = [{"text": system_instruction}]
+        # 1. Instrucción de sistema (alineada con prompt_templates / marca FEAST)
+        system_prompts = [{"text": FEAST_BEDROCK_SYSTEM_INSTRUCTION}]
 
         # 2. Convertir tu historial de mensajes al formato estandarizado de Bedrock
         bedrock_messages = []

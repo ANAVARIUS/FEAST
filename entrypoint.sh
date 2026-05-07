@@ -10,6 +10,7 @@ if [ ! -f "$INITIALIZED_FLAG" ]; then
 
     alembic upgrade head
 
+    python -m src.scripts.clean_vector_db
     python -m src.scripts.seed_data
 
     touch "$INITIALIZED_FLAG"
