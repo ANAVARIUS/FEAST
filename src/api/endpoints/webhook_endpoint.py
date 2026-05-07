@@ -1,34 +1,52 @@
-from fastapi import APIRouter, Request
-import src.api.config as config
-from src.api.Services.telegram_service import telegram_service_instance
 import logging
+
 import redis.asyncio as redis_async
+from fastapi import APIRouter, Request
+
+import src.api.config as app_state
+from src.api.Services.telegram_service import telegram_service_instance
 from src.core.config import config as app_config
+from src.infrastructure.redis.keyspace import session_key_pattern
+
+logger = logging.getLogger(__name__)
 
 webhook_router = APIRouter()
-logging.basicConfig(level=logging.INFO)
 
 
 async def set_ttl_for_thread(thread_id: str, ttl_seconds: int = 28800):
     """Establece TTL en todas las claves de Redis relacionadas con el thread."""
     try:
         redis_client = redis_async.from_url(app_config.redis_connection_string)
-        keys = await redis_client.keys(f"*{thread_id}*")
+        keys_cp = await redis_client.keys(f"*{thread_id}*")
+        keys_sess = await redis_client.keys(session_key_pattern(thread_id))
+        keys = list({*keys_cp, *keys_sess})
         if keys:
-            # Usar pipeline para mayor eficiencia
             async with redis_client.pipeline() as pipe:
                 for key in keys:
                     pipe.expire(key, ttl_seconds)
                 await pipe.execute()
-            logging.info(f"TTL de {ttl_seconds}s aplicado a {len(keys)} claves del thread {thread_id}")
+            logger.info(
+                "[redis:ttl] thread=%s keys=%d ttl_s=%s",
+                thread_id,
+                len(keys),
+                ttl_seconds,
+            )
     except Exception as e:
-        logging.error(f"Error al establecer TTL en Redis: {e}")
+        logger.error("[redis:ttl] thread=%s error: %s", thread_id, e, exc_info=True)
 
 
 @webhook_router.post("/webhook")
 async def message_recept(request: Request):
     update = await request.json()
-    logging.info(f"Update recibido: {update}")
+    msg = update.get("message") or {}
+    chat_hint = msg.get("chat", {}).get("id")
+    logger.info(
+        "[webhook:telegram] update_id=%s chat=%s has_text=%s",
+        update.get("update_id"),
+        chat_hint,
+        bool(msg.get("text")),
+    )
+    logger.debug("[webhook:telegram] payload_trunc=%s", str(update)[:800])
 
     if "message" not in update:
         return {"status": "ok"}
@@ -37,21 +55,45 @@ async def message_recept(request: Request):
     chat_id = str(message["chat"]["id"])
     text = message.get("text", "")
     if not text:
+        logger.debug("[webhook:telegram] no text chat=%s", chat_id)
         return {"status": "ok"}
+
+    preview = text if len(text) <= 400 else text[:400] + "…"
+    logger.info(
+        "[webhook:telegram] user chat=%s chars=%d text=%r",
+        chat_id,
+        len(text),
+        preview,
+    )
 
     user_message = {"role": "user", "content": text}
     thread_config = {"configurable": {"thread_id": chat_id}}
     initial_state = {
         "messages": [user_message],
         "thread_id": chat_id,
+        "intent": None,
+        "cart": None,
+        "address": None,
+        "total": None,
+        "stock_validated": None,
+        "address_valid": None,
         "created_at": None,
         "updated_at": None,
+        "menu_digest": None,
+        "cart_digest": None,
+        "order_phase": None,
     }
 
     try:
-        final_state = await config.graph.ainvoke(initial_state, config=thread_config)
+        logger.info("[graph:run] start thread=%s", chat_id)
+        final_state = await app_state.graph.ainvoke(initial_state, config=thread_config)
+        logger.info(
+            "[graph:run] end thread=%s intent=%s msgs=%d",
+            chat_id,
+            final_state.get("intent"),
+            len(final_state.get("messages") or []),
+        )
 
-        # Extraer ultimo mensaje del asistente (puede ser objeto o dict)
         assistant_messages = []
         for m in final_state["messages"]:
             if isinstance(m, dict):
@@ -67,15 +109,19 @@ async def message_recept(request: Request):
             last_response = assistant_messages[-1]
         else:
             last_response = "Lo siento, no pude generar una respuesta."
+            logger.warning("[graph:run] no assistant reply thread=%s", chat_id)
 
-        # Enviar respuesta a Telegram
+        logger.debug(
+            "[service:telegram] send chat=%s out_chars=%d",
+            chat_id,
+            len(last_response or ""),
+        )
         telegram_service_instance.send_message(int(chat_id), last_response)
 
-        # Establecer TTL en Redis para las claves del thread (8 horas)
         await set_ttl_for_thread(chat_id)
 
     except Exception as e:
-        logging.error(f"Error al procesar el grafo: {e}", exc_info=True)
+        logger.error("[graph:run] thread=%s error: %s", chat_id, e, exc_info=True)
         telegram_service_instance.send_message(int(chat_id), "Ocurrio un error interno.")
 
     return {"status": "ok"}

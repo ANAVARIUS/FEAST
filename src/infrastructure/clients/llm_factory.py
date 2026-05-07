@@ -8,6 +8,8 @@ from src.core.llm.base import BaseLLM
 from src.infrastructure.clients.gemini_llm_adapter import GeminiLLMAdapter
 from src.infrastructure.clients.llama_llm_adapter import LlamaLLMAdapter
 
+logger = logging.getLogger(__name__)
+
 
 def get_llm() -> BaseLLM:
     """
@@ -15,7 +17,7 @@ def get_llm() -> BaseLLM:
     Esto permite cambiar proveedor sin tocar la logica central.
     """
     provider = (os.getenv("LLM_PROVIDER") or "gemini").strip().lower()
-    logging.info(f"using: {provider}")
+    logger.info("[llm:factory] provider=%s", provider)
     if provider == "gemini":
         return GeminiLLMAdapter.from_config(config)
     elif provider == "llama":

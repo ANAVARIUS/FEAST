@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from src.core.llm.types import ChatMessage
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,12 @@ class BaseLLM(ABC):
     async def ainvoke(self, messages: List[ChatMessage]) -> LLMResponse:
         """Invoca el modelo de manera asíncrona. Por defecto llama a invoke en un hilo."""
         import asyncio
+
+        _log.debug(
+            "BaseLLM.ainvoke: impl=%s mensajes=%d",
+            self.__class__.__name__,
+            len(messages or []),
+        )
         return await asyncio.to_thread(self.invoke, messages)
 
     def __call__(self, messages: List[ChatMessage]) -> LLMResponse:
